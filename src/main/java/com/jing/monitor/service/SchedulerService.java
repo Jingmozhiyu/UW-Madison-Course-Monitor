@@ -1,71 +1,64 @@
 package com.jing.monitor.service;
 
-import com.jing.monitor.config.AppConfig;
 import com.jing.monitor.core.CourseCrawler;
 import com.jing.monitor.model.SectionInfo;
 import com.jing.monitor.model.StatusMapping;
 import com.jing.monitor.repository.FileRepository;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Service;
 
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.time.LocalTime;
 
+@Service // <--- 1. 声明这是业务逻辑层
 public class SchedulerService {
 
-    // 1. Create a scheduled single thread pool
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
     private final CourseCrawler crawler;
     private final FileRepository repository;
 
-    public SchedulerService() {
-        this.crawler = new CourseCrawler();
-        this.repository = new FileRepository();
+    // 从配置文件读取目标 Section
+    @Value("${uw-api.target-section}")
+    private String targetSection;
+
+    // 2. 构造函数注入 (Constructor Injection)
+    // Spring 会自动找到 crawler 和 repository 的实例并传进来
+    public SchedulerService(CourseCrawler crawler, FileRepository repository) {
+        this.crawler = crawler;
+        this.repository = repository;
     }
 
     /**
-     * Monitoring starts
-     * @param section Targeted Section ID (e.g. 76102)
+     * 定时任务
+     * fixedRateString: 从配置文件读取毫秒数 (monitor.poll-interval-ms)
      */
-    public void startMonitoring(String section) {
-        System.out.println("[Scheduler] Starting monitor for section: " + section);
+    @Scheduled(fixedRateString = "${monitor.poll-interval-ms}")
+    public void monitorTask() {
+        // System.out.println("[Scheduler] Heartbeat..."); // 调试用，确认定时器在跑
 
-        // 2. Define task
-        Runnable task = () -> {
-            try {
-                // Call the crawler
-                SectionInfo info = crawler.fetchCourseStatus(section);
+        try {
+            // 调用爬虫
+            SectionInfo info = crawler.fetchCourseStatus(targetSection);
 
-                // log output
-                if (info != null) {
-                    System.out.println("[Time: " + java.time.LocalTime.now() + "] " + info);
+            if (info != null) {
+                // 打印日志
+                System.out.println("[Time: " + LocalTime.now() + "] " + info);
 
-                    repository.save(info);
+                // 保存历史
+                repository.save(info);
 
-                    // 3. Notify if section is open
-                    if (info.getStatus() == StatusMapping.OPEN) {
-                        System.out.println("\n\n🔥🚨🔥 ALERT: SECTION " + section + " IS OPEN! GO ENROLL NOW! 🔥🚨🔥\n");
-                        //TODO: MailService
-                    }
-                    else if (info.getStatus() == StatusMapping.WAITLISTED) {
-                        System.out.println("\n\n🔥🚨🔥 ALERT: SECTION " + section + " HAS WAITLIST SEATS! GO ENROLL NOW! 🔥🚨🔥\n");
-                    }
-                } else {
-                    System.out.println("[Warning] Fetch returned null. Target section not found in this package group.");
+                // 简单的逻辑判断 (V0.3 我们会把这里升级为 NotificationService)
+                if (info.getStatus() == StatusMapping.OPEN) {
+                    System.out.println("\n\n🔥🚨🔥 ALERT: SECTION " + targetSection + " IS OPEN! 🔥🚨🔥\n");
+                } else if (info.getStatus() == StatusMapping.WAITLISTED) {
+                    System.out.println("\n\n🔥🚨🔥 ALERT: WAITLIST OPEN FOR " + targetSection + "! 🔥🚨🔥\n");
                 }
-
-            } catch (Exception e) {
-                System.err.println("Error in scheduled task: " + e.getMessage());
-                e.printStackTrace();
+            } else {
+                System.out.println("[Warning] Fetch returned null. Target section not found.");
             }
-        };
 
-        // 4. Submit task
-        int interval = AppConfig.getInt("app.poll-interval-seconds");
-        scheduler.scheduleAtFixedRate(task, 0, interval, TimeUnit.SECONDS);
-    }
-
-    public void stop() {
-        System.out.println("[Scheduler] Stopping...");
-        scheduler.shutdown();
+        } catch (Exception e) {
+            System.err.println("Error in scheduled task: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }
