@@ -9,9 +9,9 @@ public class SectionInfo {
 
     public SectionInfo() {}
 
-    public SectionInfo(String subject, String courseNumber, String classNumber, StatusMapping status, String courseId){
+    public SectionInfo(String subject, String catalogNumber, String classNumber, StatusMapping status, String courseId){
         this.subject = subject;
-        this.catalogNumber = courseNumber;
+        this.catalogNumber = catalogNumber;
         this.section = classNumber;
         this.status = status;
         this.courseId = courseId;
