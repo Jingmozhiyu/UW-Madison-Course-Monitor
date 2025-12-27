@@ -6,11 +6,9 @@ import com.jing.monitor.model.StatusMapping;
 import com.jing.monitor.model.Task;
 import com.jing.monitor.repository.TaskRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j; // Optional: Good for logging
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalTime;
 import java.util.List;
 
 /**

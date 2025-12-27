@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>UW Course Monitor V0.4</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 UW Course Monitor</h1>
+
+        <div class="form-group">
+            <h3>Add New Task</h3>
+            <label>Subject (e.g. COMP SCI):
+                <input type="text" id="inputSubject" placeholder="COMP SCI"/>
+            </label>
+            <label>Catalog (e.g. 577):
+                <input type="text" id="inputCatalog" placeholder="577"/>
+            </label>
+            <label>Section ID (5 digits):
+                <input type="text" id="inputSectionId" placeholder="60035"/>
+            </label>
+            <button id="btnCreate" style="background-color: #4CAF50; color: white;">➕ Start Monitor</button>
+        </div>
+
+        <hr/>
+
+        <div class="form-group">
+            <h3>Manage Task</h3>
+            <label>Target Task ID (Database ID):
+                <input type="number" id="taskId" placeholder="Enter ID to Update/Delete"/>
+            </label>
+            <button id="btnUpdate" style="background-color: #2196F3; color: white;">✏️ Update Section</button>
+            <button id="btnDelete" style="background-color: #f44336; color: white;">🗑️ Delete Task</button>
+        </div>
+
+        <hr/>
+
+        <div class="form-group">
+            <h3>Current Tasks</h3>
+            <button id="btnRead">🔄 Refresh List</button>
+            <div id="outputArea" style="margin-top: 10px; font-family: monospace; color: #333;"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

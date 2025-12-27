@@ -26,12 +26,12 @@ public class Task {
     private String sectionId;
 
     /**
-     * The internal course ID used by UW API (e.g., "005721").
+     * The internal course ID used by UW API (e.g., "004289").
      */
     private String courseId;
 
     /**
-     * Human-readable name (e.g., "COMP SCI 400").
+     * Human-readable name (e.g., "COMP SCI 577").
      */
     private String courseDisplayName;
 
