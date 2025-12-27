@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jing.monitor.model.SectionInfo;
 import com.jing.monitor.model.StatusMapping;
+import com.jing.monitor.model.Task;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Value;
@@ -11,48 +12,53 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
-@Component // <--- 1. 变成 Spring Bean
+/**
+ * Core component responsible for fetching data from the UW-Madison Enrollment API.
+ */
+@Component
 public class CourseCrawler {
 
-    // 2. 使用 @Value 注入配置 (替代 AppConfig)
+    // Inject configuration values
     @Value("${uw-api.term-id}")
     private String termId;
 
     @Value("${uw-api.subject-id}")
     private String subjectId;
 
-    @Value("${uw-api.course-id}")
-    private String courseId;
-
-    // 3. 将 ObjectMapper 提升为成员变量 (性能优化，不必每次 new)
+    // Reuse ObjectMapper instance for performance optimization
     private final ObjectMapper mapper = new ObjectMapper();
 
-    private String buildApiUrl() {
-        // 动态拼接
-        return String.format("https://public.enroll.wisc.edu/api/search/v1/enrollmentPackages/%s/%s/%s",
-                termId, subjectId, courseId);
-    }
-
-    public SectionInfo fetchCourseStatus(String section) {
-        // System.out.println("[Crawler] Requesting UW API..."); // 暂时注释掉，减少刷屏
-
+    /**
+     * Fetches the real-time status of a specific course section.
+     *
+     * @param task The monitoring task containing course and section IDs.
+     * @return SectionInfo object if successful, or null if fetch fails.
+     */
+    public SectionInfo fetchCourseStatus(Task task) {
         try {
-            // 1. Fetch JSON
-            String url = buildApiUrl();
+            // 1. Construct the API URL
+            // Note: Currently relies on 'subjectId' from config. Future refactoring will move subjectId to the Task entity.
+            String url = String.format("https://public.enroll.wisc.edu/api/search/v1/enrollmentPackages/%s/%s/%s",
+                    termId, subjectId, task.getCourseId());
+
+            // 2. Execute HTTP GET Request via Jsoup
+            // ignoreContentType is required because the API returns JSON, not HTML
             String jsonResponse = Jsoup.connect(url)
                     .ignoreContentType(true)
                     .method(Connection.Method.GET)
-                    // .userAgent("...") // TODO: 后续我们需要从配置里读取 User-Agent
                     .execute()
                     .body();
 
-            // 2. Parse JSON
+            // 3. Parse JSON Response
             JsonNode rootNode = mapper.readTree(jsonResponse);
 
-            // 3. Get infos of targeted section
+            // 4. Traverse the JSON array to find the specific section
             if (rootNode.isArray()) {
                 for (JsonNode node : rootNode) {
-                    if (node.path("enrollmentClassNumber").asText().equals(section)) {
+                    // Match by 'enrollmentClassNumber' (which is the 5-digit section ID)
+                    if (node.path("enrollmentClassNumber").asText().equals(task.getSectionId())) {
+
+                        // Extract course details
                         String subject = node.path("sections").path(0)
                                 .path("subject").path("shortDescription")
                                 .asText();
@@ -63,23 +69,26 @@ public class CourseCrawler {
                                 .path("status")
                                 .asText();
 
+                        // Map string status to Enum safely
                         StatusMapping status;
                         try {
                             status = StatusMapping.valueOf(statusStr);
                         } catch (IllegalArgumentException | NullPointerException e) {
-                            System.err.println("Unknown status: " + statusStr);
-                            status = StatusMapping.CLOSED;
+                            System.err.println("Unknown status encountered: " + statusStr);
+                            status = StatusMapping.CLOSED; // Default fallback
                         }
 
-                        // 注意：这里 courseId 我们直接用成员变量即可，或者从 JSON 读也行
-                        return new SectionInfo(subject, catalogNumber, section, status, this.courseId);
+                        return new SectionInfo(subject, catalogNumber, task.getSectionId(), status, task.getCourseId());
                     }
                 }
             }
+
+            // Section not found in the response
             return null;
+
         } catch (IOException e) {
-            System.err.println("Network Error: " + e.getMessage());
-            return new SectionInfo();
+            System.err.println("Network/Parsing Error for task " + task.getSectionId() + ": " + e.getMessage());
+            return null; // Return null to indicate failure to the scheduler
         }
     }
 }

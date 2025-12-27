@@ -1,38 +1,57 @@
 package com.jing.monitor.model;
 
-import jakarta.persistence.*; // Spring Boot 3 使用 jakarta，旧版用 javax
+import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * Entity class representing a monitoring task.
+ * Maps to the "tasks" table in the MySQL database.
+ */
 @Entity
 @Table(name = "tasks")
-@Data // Lombok 自动生成 Getter/Setter/ToString
+@Data // Lombok: Generates Getters, Setters, toString, etc.
 @NoArgsConstructor
 public class Task {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // 1. 核心配置 (对应你的 section)
-    // 这里的 @Column(unique = true) 意味着同一门课不能被重复添加两次
+    /**
+     * The 5-digit unique section ID (e.g., "60035").
+     * Defined as unique to prevent duplicate monitoring tasks for the same section.
+     */
     @Column(nullable = false, unique = true)
     private String sectionId;
 
-    // 2. API 参数 (对应你的 courseId)
+    /**
+     * The internal course ID used by UW API (e.g., "005721").
+     */
     private String courseId;
 
-    // 3. 展示信息 (对应 subject + catalogNumber，例如 "COMP SCI 577")
+    /**
+     * Human-readable name (e.g., "COMP SCI 400").
+     */
     private String courseDisplayName;
 
+    /**
+     * Flag to enable or disable monitoring for this task.
+     */
     private boolean enabled = true;
 
-    public Task(String subject, String catalogNumber, String sectionId, String courseId) {
+    /**
+     * The last recorded status of the section.
+     * Used for state persistence and debounce logic.
+     */
+    @Enumerated(EnumType.STRING) // Best practice: Store Enum as String in DB for readability
+    private StatusMapping lastStatus;
+
+    public Task(String subject, String catalogNumber, String sectionId, String courseId, StatusMapping lastStatus) {
         this.sectionId = sectionId;
         this.courseId = courseId;
+        this.courseDisplayName = subject + " " + catalogNumber;
         this.enabled = true;
-        courseDisplayName = subject + " " + catalogNumber;
+        this.lastStatus = lastStatus;
     }
-
-    // 4. 用户相关 (暂留，V0.3 先不加，默认所有任务都归属系统)
-    // private Long userId;
 }

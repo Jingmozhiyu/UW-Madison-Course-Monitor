@@ -21,7 +21,7 @@ class TaskRepositoryTest {
         System.out.println("====== 开始测试 MySQL CRUD ======");
 
         // 1. Create (增)
-        Task newTask = new Task("SPR BT", "200","99999","009999");
+        Task newTask = new Task("SPR BT", "200","99999","009999",null);
         // 保存到数据库，save() 方法会返回保存后的对象（包含了生成的 ID）
         Task savedTask = taskRepository.save(newTask);
 

@@ -10,7 +10,7 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-@Repository // <--- 关键改变：告诉 Spring 这是一个仓库组件
+@Repository
 public class FileRepository {
 
     private static final String FILE_PATH = "logs/history.csv";
