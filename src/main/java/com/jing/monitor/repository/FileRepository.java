@@ -17,7 +17,7 @@ public class FileRepository {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     public FileRepository() {
-        initFile();
+        return;
     }
 
     private void initFile() {
