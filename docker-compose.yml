@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  # 服务 1: 你的 Spring Boot 应用
+  course-sniper-app:
+    build: .  # 使用当前目录的 Dockerfile 构建
+    ports:
+      - "8080:8080" # 左边是 Mac 端口，右边是容器端口
+    depends_on:
+      - mysqldb # 必须等数据库启动了再启动我
+    environment:
+      # 🔥 关键点：覆盖 application.properties 里的配置
+      # 在 Docker 内部，localhost 指的是容器自己。
+      # 要访问下面的数据库容器，主机名必须写服务名 "mysqldb"
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysqldb:3306/course_monitor_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root_password # 对应下面 DB 的密码
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+
+  # 服务 2: MySQL 数据库
+  mysqldb:
+    image: mysql:8.0
+    # 如果你是 M1/M2/M3 芯片，MySQL 官方镜像可能有些慢，加上这行更稳
+    platform: linux/x86_64
+    ports:
+      - "3307:3306" # 把 Mac 的 3307 映射给数据库（防止跟你 Mac 本地的 MySQL 3306 冲突）
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: course_monitor_db
+    volumes:
+      - db_data:/var/lib/mysql # 数据持久化，防止重启 Docker 数据丢失
+
+volumes:
+  db_data:
