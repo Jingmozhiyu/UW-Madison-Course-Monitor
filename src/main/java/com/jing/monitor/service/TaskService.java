@@ -7,17 +7,23 @@ import com.jing.monitor.model.dto.TaskReqDto;
 import com.jing.monitor.model.dto.TaskRespDto;
 import com.jing.monitor.repository.TaskRepository;
 import jakarta.transaction.Transactional;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TaskService {
 
     private final CourseCrawler crawler;
@@ -58,21 +64,28 @@ public class TaskService {
         JsonNode reqs = firstHit.path("courseRequirements");
         Iterator<String> fieldNames = reqs.fieldNames();
         List<TaskReqDto> reqDtoList = new ArrayList<>();
+        Set<String> sectionIdSet = new LinkedHashSet<>();
 
-        if (fieldNames.hasNext()) {
-            String dynamicKey = fieldNames.next(); // get "016222="
+        // Traverse all dynamic keys under "courseRequirements" and collect all section IDs.
+        while (fieldNames.hasNext()) {
+            String dynamicKey = fieldNames.next(); // e.g. "018015=", "018015=100010"
             JsonNode sectionIdArray = reqs.path(dynamicKey);
-
-            for (int i = 0; i < sectionIdArray.size(); i++) {
-                TaskReqDto reqDto = new TaskReqDto();
-                String sectionId = sectionIdArray.get(i).asText();
-                System.out.println("Found Section ID: " + sectionId);
-                reqDto.setCourseDisplayName(foundName);
-                reqDto.setSectionId(sectionId);
-                reqDto.setCourseId(firstHit.path("courseId").asText());
-                reqDto.setEnabled(false);
-                reqDtoList.add(reqDto);
+            if (!sectionIdArray.isArray()) {
+                continue;
             }
+            for (int i = 0; i < sectionIdArray.size(); i++) {
+                sectionIdSet.add(sectionIdArray.get(i).asText());
+            }
+        }
+
+        for (String sectionId : sectionIdSet) {
+            TaskReqDto reqDto = new TaskReqDto();
+            log.info("[TaskService] Found section ID: {}", sectionId);
+            reqDto.setCourseDisplayName(foundName);
+            reqDto.setSectionId(sectionId);
+            reqDto.setCourseId(firstHit.path("courseId").asText());
+            reqDto.setEnabled(false);
+            reqDtoList.add(reqDto);
         }
 
         return addCourse(reqDtoList);
@@ -81,9 +94,26 @@ public class TaskService {
     // 3. Add new course
     public List<TaskRespDto> addCourse(List<TaskReqDto> reqDtos){
         List<TaskRespDto> respDtos = new ArrayList<>();
+        if (reqDtos == null || reqDtos.isEmpty()) {
+            return respDtos;
+        }
+
+        List<String> sectionIds = reqDtos.stream()
+                .map(TaskReqDto::getSectionId)
+                .toList();
+        Map<String, Task> existingTaskMap = taskRepository.findAllBySectionIdIn(sectionIds).stream()
+                .collect(Collectors.toMap(Task::getSectionId, Function.identity()));
+
         for (TaskReqDto req : reqDtos){
-            Task task = new Task();
-            BeanUtils.copyProperties(req,task);
+            Task task = existingTaskMap.get(req.getSectionId());
+            if (task == null) {
+                task = new Task();
+                BeanUtils.copyProperties(req, task);
+            } else {
+                // Idempotent add: keep a single row per unique sectionId and refresh basic metadata.
+                task.setCourseDisplayName(req.getCourseDisplayName());
+                task.setCourseId(req.getCourseId());
+            }
             taskRepository.save(task);
             respDtos.add(convertToResp(task));
         }

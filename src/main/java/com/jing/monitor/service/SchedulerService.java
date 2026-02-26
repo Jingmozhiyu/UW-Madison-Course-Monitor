@@ -4,15 +4,21 @@ import com.jing.monitor.core.CourseCrawler;
 import com.jing.monitor.model.SectionInfo;
 import com.jing.monitor.model.StatusMapping;
 import com.jing.monitor.model.Task;
+import com.jing.monitor.repository.FileRepository;
 import com.jing.monitor.repository.TaskRepository;
+import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Service responsible for scheduling course monitoring tasks.
@@ -20,10 +26,12 @@ import java.util.Set;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SchedulerService {
 
     private final CourseCrawler crawler;
     private final MailService mailService;
+    private final FileRepository fileRepository;
     private final TaskRepository taskRepository;
     private final Random random = new Random();
 
@@ -44,11 +52,11 @@ public class SchedulerService {
         }
 
         if (courseSet.isEmpty()) {
-            System.out.println("[Scheduler] No active tasks. Idle.");
+            log.info("[Scheduler] No active tasks. Idle.");
             return;
         }
 
-        System.out.println("[Scheduler] Starting cycle. Monitoring " + courseSet.size() + " unique courses.");
+        log.info("[Scheduler] Starting cycle. Monitoring {} unique courses.", courseSet.size());
 
         int cnt = courseSet.size();
         // 2. Batch Processing: Fetch data per Course (1 Request = N Sections)
@@ -77,9 +85,13 @@ public class SchedulerService {
             List<SectionInfo> infos = crawler.fetchCourseStatus(courseId);
 
             if (infos == null) {
-                System.err.println("[Error] Fetch failed or blocked for course: " + courseId);
+                log.warn("[Scheduler] Fetch failed or blocked for course: {}", courseId);
                 return;
             }
+
+            // Step 2: DB I/O - Fetch all tasks for this course in one query and build index by sectionId.
+            Map<String, Task> taskMapBySectionId = taskRepository.findAllByCourseId(courseId).stream()
+                    .collect(Collectors.toMap(Task::getSectionId, Function.identity(), (left, right) -> left, HashMap::new));
 
             // Step 2: Synchronization - Update Database
             for (SectionInfo info : infos) {
@@ -87,15 +99,16 @@ public class SchedulerService {
                 StatusMapping previousStatus = null;
                 String sectionId = info.getSection();
 
-                // Find existing task for this specific section
-                Task task = taskRepository.findBySectionId(sectionId);
+                // O(1) lookup from in-memory index instead of querying DB per section.
+                Task task = taskMapBySectionId.get(sectionId);
 
                 // Logic: Auto-Discovery vs Update
                 if (task == null) {
                     // Scenario A: New Section Discovered (Auto-add to DB)
                     // Note: This will monitor ALL sections. If this is spammy, add filtering logic here.
                     task = new Task(info.getSubject(), info.getCatalogNumber(), sectionId, courseId, info.getStatus());
-                    System.out.println("[New Section] Found " + info.getSection() + ". Adding to DB.");
+                    taskMapBySectionId.put(sectionId, task);
+                    log.info("[Scheduler] New section found {}. Adding to DB.", info.getSection());
 
                     // TODO: Optional: Send alert on discovery?
                     AlertAction action = determineAction(null, currentStatus);
@@ -104,8 +117,7 @@ public class SchedulerService {
                     // Scenario B: Existing Task Update
                     previousStatus = task.getLastStatus();
 
-                    // Logging state only on changes or verbose debug can go here
-                    // System.out.println("[Checking] " + task.getCourseDisplayName() + " [" + currentStatus + "]");
+                    // Logging state only on changes or verbose debug can go here.
 
                     if (task.isEnabled()) {
                         AlertAction action = determineAction(previousStatus, currentStatus);
@@ -116,15 +128,15 @@ public class SchedulerService {
                 // Step 3: Persistence
                 if (previousStatus != currentStatus || task.getId() == null) {
                     if (task.getId() != null) {
-                        System.out.println("🔄 State changed: " + previousStatus + " -> " + currentStatus + " for " + sectionId);
+                        log.info("[Scheduler] State changed: {} -> {} for {}", previousStatus, currentStatus, sectionId);
                     }
                     task.setLastStatus(currentStatus);
                     taskRepository.save(task);
+                    fileRepository.save(info);
                 }
             }
         } catch (Exception e) {
-            System.err.println("Error processing course " + courseId + ": " + e.getMessage());
-            e.printStackTrace();
+            log.error("[Scheduler] Error processing course {}", courseId, e);
         }
     }
 
@@ -149,10 +161,10 @@ public class SchedulerService {
 
     private void Mail(AlertAction action, SectionInfo info) {
         if (action == AlertAction.SEND_OPEN_EMAIL) {
-            System.out.println("🔥 ALERT: OPEN detected for " + info.getSection());
+            log.info("[Scheduler] ALERT OPEN detected for {}", info.getSection());
             mailService.sendCourseOpenAlert(info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
         } else if (action == AlertAction.SEND_WAITLIST_EMAIL) {
-            System.out.println("⚠️ ALERT: WAITLIST detected for " + info.getSection());
+            log.info("[Scheduler] ALERT WAITLIST detected for {}", info.getSection());
             mailService.sendCourseWaitlistedAlert(info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
         }
     }
