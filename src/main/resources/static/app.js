@@ -73,7 +73,7 @@ const searchAndAdd = () => {
     const btn = document.getElementById('btnAdd');
     const courseName = input.value.trim();
 
-    if (!courseName) { alert("Please enter a course name (e.g. COMP SCI 577)"); return; }
+    if (!courseName) { alert("Please enter a course name/section id (e.g. COMP SCI 577, 76101)"); return; }
 
     // UI Feedback: Disable button to prevent double-click abuse
     btn.disabled = true;

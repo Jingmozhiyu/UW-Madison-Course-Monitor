@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jing.monitor.model.SectionInfo;
 import com.jing.monitor.model.StatusMapping;
+import lombok.extern.slf4j.Slf4j;
 import org.jsoup.Connection;
 import org.jsoup.Jsoup;
 import org.springframework.beans.factory.annotation.Value;
@@ -25,6 +26,7 @@ import java.util.Map;
  * 3. Returns a list of all sections to reduce API call frequency.
  */
 @Component
+@Slf4j
 public class CourseCrawler {
 
     @Value("${uw-api.term-id}")
@@ -102,21 +104,21 @@ public class CourseCrawler {
                     return sectionInfos;
                 }
 
-                System.err.println("⚠️ API 200 OK but returned unexpected format for: " + courseId);
+                log.warn("[Crawler] API 200 but returned unexpected format for course: {}", courseId);
                 return null;
             }
 
             // Handle WAF or Rate Limiting
             if (statusCode == 202 || statusCode == 403 || statusCode == 429) {
-                System.out.println("⏳ API Status " + statusCode + " (Blocked/Rate Limited). Skipping cycle.");
+                log.warn("[Crawler] API status {} (blocked/rate limited). Skipping cycle.", statusCode);
                 return null;
             }
 
-            System.err.println("❌ API Error: " + statusCode + " | Body: " + response.body());
+            log.error("[Crawler] API error: {} | body: {}", statusCode, response.body());
             return null;
 
         } catch (IOException e) {
-            System.err.println("⚠️ Network Error: " + e.getMessage());
+            log.error("[Crawler] Network error while fetching course {}", courseId, e);
         }
 
         return null;
@@ -152,9 +154,6 @@ public class CourseCrawler {
             // Convert to string and ready to be sent
             String jsonPayload = mapper.writeValueAsString(root);
 
-            // System.out.println("Generated Payload: " + jsonPayload);
-
-
             // POST Request
             Connection.Response response = Jsoup.connect(searchUrl)
                     .header("Content-Type", "application/json")
@@ -170,12 +169,12 @@ public class CourseCrawler {
             if (response.statusCode() == 200) {
                 return mapper.readTree(response.body());
             } else {
-                System.err.println("Search failed: " + response.statusCode());
+                log.warn("[Crawler] Search failed with status: {}", response.statusCode());
                 return null;
             }
 
         } catch (Exception e) {
-            System.err.println("Network error during search: " + e.getMessage());
+            log.error("[Crawler] Network error during search for query: {}", userQueryString, e);
             return null;
         }
     }
