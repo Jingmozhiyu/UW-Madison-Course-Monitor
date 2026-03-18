@@ -1,17 +1,141 @@
-const API_URL = 'http://localhost:8080/api/tasks';
+const API_BASE_URL = 'http://localhost:8080';
+const TASK_API_URL = '/api/tasks';
+const TOKEN_KEY = 'uwcm_jwt_token';
+const USER_EMAIL_KEY = 'uwcm_user_email';
+
+if (typeof axios === 'undefined') {
+    alert('Frontend dependency failed to load (axios). Please refresh and check static resource loading.');
+    throw new Error('axios is undefined');
+}
+
+const api = axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 20000
+});
+
+api.interceptors.request.use(config => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (token) {
+        config.headers = config.headers || {};
+        config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+});
+
+api.interceptors.response.use(
+    response => response,
+    error => {
+        if (error.response?.status === 401) {
+            clearAuth();
+            renderLoginRequired('Session expired. Please login again.');
+        }
+        return Promise.reject(error);
+    }
+);
+
+const clearAuth = () => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_EMAIL_KEY);
+    updateAuthStatus();
+};
+
+const setAuth = (email, token) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_EMAIL_KEY, email);
+    updateAuthStatus();
+};
+
+const isLoggedIn = () => !!localStorage.getItem(TOKEN_KEY);
+
+const updateAuthStatus = () => {
+    const currentUser = document.getElementById('currentUser');
+    const email = localStorage.getItem(USER_EMAIL_KEY);
+    currentUser.innerText = email || 'Not logged in';
+};
+
+const getAuthForm = () => {
+    const email = document.getElementById('emailInput').value.trim();
+    const password = document.getElementById('passwordInput').value.trim();
+    if (!email || !password) {
+        throw new Error('Email and password are required.');
+    }
+    return { email, password };
+};
+
+const register = () => {
+    let payload;
+    try {
+        payload = getAuthForm();
+    } catch (e) {
+        alert(e.message);
+        return;
+    }
+
+    api.post('/auth/register', payload)
+        .then(() => {
+            alert('Register success. Please login.');
+        })
+        .catch(err => {
+            const msg = err.response?.data?.msg || 'Register failed.';
+            alert(msg);
+        });
+};
+
+const login = () => {
+    let payload;
+    try {
+        payload = getAuthForm();
+    } catch (e) {
+        alert(e.message);
+        return;
+    }
+
+    api.post('/auth/login', payload)
+        .then(response => {
+            const data = response.data?.data;
+            if (!data?.token) {
+                alert('Login failed: missing token.');
+                return;
+            }
+            setAuth(data.email, data.token);
+            loadTasks();
+        })
+        .catch(err => {
+            const msg = err.response?.data?.msg || 'Login failed.';
+            alert(msg);
+        });
+};
+
+const logout = () => {
+    clearAuth();
+    renderLoginRequired('Please login to view your tasks.');
+};
+
+const renderLoginRequired = (message) => {
+    const tbody = document.getElementById('taskTableBody');
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:#666">${message}</td></tr>`;
+    document.getElementById('totalCount').innerText = '0';
+};
 
 // 1. Load Tasks
 const loadTasks = () => {
+    if (!isLoggedIn()) {
+        renderLoginRequired('Please login to view your tasks.');
+        return;
+    }
+
     const tbody = document.getElementById('taskTableBody');
-    axios.get(API_URL)
+    api.get(TASK_API_URL)
         .then(response => {
-            const tasks = response.data.data;
+            const tasks = response.data.data || [];
             document.getElementById('totalCount').innerText = tasks.length;
             renderTable(tasks);
         })
         .catch(err => {
             console.error(err);
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red">Backend Error. Is Spring Boot running?</td></tr>`;
+            if (err.response?.status !== 401) {
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red">Backend Error. Is Spring Boot running?</td></tr>`;
+            }
         });
 };
 
@@ -59,42 +183,45 @@ const renderTable = (tasks) => {
 
 // 2. Toggle Status
 const toggleTask = (id) => {
-    axios.patch(`${API_URL}/${id}/toggle`)
-        .then(res => console.log(`Task ${id} toggled`))
-        .catch(err => {
-            alert("Failed to toggle status");
+    api.patch(`${TASK_API_URL}/${id}/toggle`)
+        .catch(() => {
+            alert('Failed to toggle status');
             loadTasks(); // revert UI on error
         });
 };
 
 // 3. Search & Add (Core Function)
 const searchAndAdd = () => {
+    if (!isLoggedIn()) {
+        alert('Please login first.');
+        return;
+    }
+
     const input = document.getElementById('searchInput');
     const btn = document.getElementById('btnAdd');
     const courseName = input.value.trim();
 
-    if (!courseName) { alert("Please enter a course name/section id (e.g. COMP SCI 577, 76101)"); return; }
+    if (!courseName) {
+        alert('Please enter a course name/section id (e.g. COMP SCI 577, 76101)');
+        return;
+    }
 
-    // UI Feedback: Disable button to prevent double-click abuse
     btn.disabled = true;
-    btn.innerHTML = "⏳ Searching...";
+    btn.innerHTML = 'Searching...';
 
-    // Use params to match backend @RequestParam
-    axios.post(API_URL, null, { params: { courseName: courseName } })
+    api.post(TASK_API_URL, null, { params: { courseName: courseName } })
         .then(res => {
-            alert(`✅ Sniper deployed! Found ${res.data.data.length} sections.`);
-            input.value = ''; // clear input
-            loadTasks(); // refresh list
+            alert(`Sniper deployed! Found ${res.data.data.length} sections.`);
+            input.value = '';
+            loadTasks();
         })
         .catch(err => {
-            console.error(err);
-            // Handle backend exceptions (e.g. Course Not Found)
-            const msg = err.response?.data?.msg || "Search failed. Check console.";
-            alert("❌ Error: " + msg);
+            const msg = err.response?.data?.msg || 'Search failed. Check console.';
+            alert('Error: ' + msg);
         })
         .finally(() => {
             btn.disabled = false;
-            btn.innerHTML = "🔍 Snipe!";
+            btn.innerHTML = '🔍 Snipe!';
         });
 };
 
@@ -102,16 +229,25 @@ const searchAndAdd = () => {
 const deleteCourse = (courseDisplayName) => {
     if (!confirm(`Are you sure you want to delete ALL sections for "${courseDisplayName}"?`)) return;
 
-    axios.delete(API_URL, { params: { courseDisplayName: courseDisplayName } })
-        .then(res => {
-            // alert("Deleted."); // Optional
+    api.delete(TASK_API_URL, { params: { courseDisplayName: courseDisplayName } })
+        .then(() => {
             loadTasks();
         })
-        .catch(err => {
-            alert("Delete failed.");
-            console.error(err);
+        .catch(() => {
+            alert('Delete failed.');
         });
-}
+};
 
 // Init
-window.onload = loadTasks;
+window.onload = () => {
+    updateAuthStatus();
+    loadTasks();
+};
+
+window.login = login;
+window.register = register;
+window.logout = logout;
+window.searchAndAdd = searchAndAdd;
+window.loadTasks = loadTasks;
+window.toggleTask = toggleTask;
+window.deleteCourse = deleteCourse;

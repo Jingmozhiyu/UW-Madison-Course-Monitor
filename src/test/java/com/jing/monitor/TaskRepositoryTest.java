@@ -9,13 +9,18 @@ import org.springframework.boot.test.context.SpringBootTest;
 import java.util.List;
 import java.util.Optional;
 
-// 这是一个集成测试，它会启动整个 Spring 容器，连接真实的 MySQL
+/**
+ * Integration test for TaskRepository CRUD behavior against configured database.
+ */
 @SpringBootTest
 class TaskRepositoryTest {
 
     @Autowired
     private TaskRepository taskRepository;
 
+    /**
+     * Executes basic create/read/update/delete flow for task records.
+     */
     @Test
     void testCrudOperations() {
         System.out.println("====== 开始测试 MySQL CRUD ======");

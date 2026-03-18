@@ -1,5 +1,8 @@
 package com.jing.monitor.model;
 
+/**
+ * In-memory model that represents one section snapshot returned by the crawler.
+ */
 public class SectionInfo {
     private String subject;
     private String catalogNumber;
@@ -7,8 +10,20 @@ public class SectionInfo {
     private StatusMapping status;
     private String courseId;
 
+    /**
+     * Creates an empty section info object.
+     */
     public SectionInfo() {}
 
+    /**
+     * Creates a section info snapshot.
+     *
+     * @param subject subject short name
+     * @param catalogNumber catalog number
+     * @param classNumber section/class number
+     * @param status enrollment status
+     * @param courseId course id from UW API
+     */
     public SectionInfo(String subject, String catalogNumber, String classNumber, StatusMapping status, String courseId){
         this.subject = subject;
         this.catalogNumber = catalogNumber;

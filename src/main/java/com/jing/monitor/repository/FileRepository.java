@@ -14,6 +14,9 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.StringJoiner;
 
+/**
+ * File-backed append-only repository for section status history snapshots.
+ */
 @Repository
 @Slf4j
 public class FileRepository {
@@ -22,6 +25,9 @@ public class FileRepository {
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final String HEADER = "Timestamp,Subject,CatalogNumber,Section,Status,CourseId";
 
+    /**
+     * Initializes history file and header line on startup.
+     */
     @PostConstruct
     private void initFile() {
         try {
@@ -42,6 +48,11 @@ public class FileRepository {
         }
     }
 
+    /**
+     * Appends one section status record to {@code logs/history.csv}.
+     *
+     * @param info section snapshot to persist
+     */
     public synchronized void save(SectionInfo info) {
         if (info == null) {
             log.warn("[Repo] Skip save because SectionInfo is null");
@@ -70,6 +81,12 @@ public class FileRepository {
         }
     }
 
+    /**
+     * Escapes values according to minimal CSV quoting rules.
+     *
+     * @param value raw field value
+     * @return escaped CSV-safe value
+     */
     private String escapeCsv(String value) {
         if (value == null) {
             return "";

@@ -1,4 +1,4 @@
-# 1. 基础镜像：我们要一个装好了 Java 17 的 Linux 环境
+# 1. 基础镜像：我们要一个装好了 Java 21 的 Linux 环境
 FROM eclipse-temurin:21-jdk-jammy
 
 # 2. 设定工作目录

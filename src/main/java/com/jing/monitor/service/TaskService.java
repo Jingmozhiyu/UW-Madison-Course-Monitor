@@ -21,6 +21,9 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Application service for authenticated task CRUD and course-to-task expansion.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -28,17 +31,29 @@ public class TaskService {
 
     private final CourseCrawler crawler;
     private final TaskRepository taskRepository;
+    private final AuthContextService authContextService;
 
-    // 1. Get List
+    /**
+     * Returns all tasks owned by the current authenticated user.
+     *
+     * @return list of task response DTOs
+     */
     public List<TaskRespDto> getAllTasks() {
-        return taskRepository.findAll().stream()
+        Long userId = authContextService.currentUserId();
+        return taskRepository.findAllByUserId(userId).stream()
                 .map(this::convertToResp)
                 .collect(Collectors.toList());
     }
 
-    // 2. Toggle Status Logic
+    /**
+     * Toggles one task's enabled flag under current user ownership.
+     *
+     * @param id task id
+     * @return updated task response
+     */
     public TaskRespDto toggleTaskStatus(Long id) {
-        Task task = taskRepository.findById(id)
+        Long userId = authContextService.currentUserId();
+        Task task = taskRepository.findByIdAndUserId(id, userId)
                 .orElseThrow(() -> new RuntimeException("Task not found: " + id));
 
         // Flip the boolean
@@ -48,6 +63,12 @@ public class TaskService {
         return convertToResp(saved);
     }
 
+    /**
+     * Searches a course and expands all discovered section ids into user tasks.
+     *
+     * @param courseName user-provided course query
+     * @return created or updated task DTOs
+     */
     public List<TaskRespDto> SearchAndAdd(String courseName) {
         JsonNode root = crawler.searchCourse(courseName);
 
@@ -66,7 +87,7 @@ public class TaskService {
         List<TaskReqDto> reqDtoList = new ArrayList<>();
         Set<String> sectionIdSet = new LinkedHashSet<>();
 
-        // Traverse all dynamic keys under "courseRequirements" and collect all section IDs.
+        // Traverse all dynamic requirement keys and aggregate section IDs.
         while (fieldNames.hasNext()) {
             String dynamicKey = fieldNames.next(); // e.g. "018015=", "018015=100010"
             JsonNode sectionIdArray = reqs.path(dynamicKey);
@@ -91,8 +112,14 @@ public class TaskService {
         return addCourse(reqDtoList);
     }
 
-    // 3. Add new course
+    /**
+     * Upserts tasks for the current user from prepared request DTOs.
+     *
+     * @param reqDtos task request DTO list
+     * @return persisted task DTOs
+     */
     public List<TaskRespDto> addCourse(List<TaskReqDto> reqDtos){
+        Long userId = authContextService.currentUserId();
         List<TaskRespDto> respDtos = new ArrayList<>();
         if (reqDtos == null || reqDtos.isEmpty()) {
             return respDtos;
@@ -101,7 +128,7 @@ public class TaskService {
         List<String> sectionIds = reqDtos.stream()
                 .map(TaskReqDto::getSectionId)
                 .toList();
-        Map<String, Task> existingTaskMap = taskRepository.findAllBySectionIdIn(sectionIds).stream()
+        Map<String, Task> existingTaskMap = taskRepository.findAllBySectionIdInAndUserId(sectionIds, userId).stream()
                 .collect(Collectors.toMap(Task::getSectionId, Function.identity()));
 
         for (TaskReqDto req : reqDtos){
@@ -109,10 +136,14 @@ public class TaskService {
             if (task == null) {
                 task = new Task();
                 BeanUtils.copyProperties(req, task);
+                task.setUserId(userId);
             } else {
-                // Idempotent add: keep a single row per unique sectionId and refresh basic metadata.
+                // Idempotent upsert for user-owned section tasks.
                 task.setCourseDisplayName(req.getCourseDisplayName());
                 task.setCourseId(req.getCourseId());
+                if (task.getUserId() == null) {
+                    task.setUserId(userId);
+                }
             }
             taskRepository.save(task);
             respDtos.add(convertToResp(task));
@@ -120,20 +151,27 @@ public class TaskService {
         return respDtos;
     }
 
-    // 4. Delete course
+    /**
+     * Deletes all tasks matching course display name for current user.
+     *
+     * @param courseDisplayName course display name
+     */
     @Transactional
     public void deleteTask(String courseDisplayName) {
-        taskRepository.deleteAllByCourseDisplayName(courseDisplayName);
+        Long userId = authContextService.currentUserId();
+        taskRepository.deleteAllByCourseDisplayNameAndUserId(courseDisplayName, userId);
     }
 
-    // Helper: Entity -> DTO
+    /**
+     * Converts task entity to API response DTO.
+     *
+     * @param task entity
+     * @return DTO
+     */
     private TaskRespDto convertToResp(Task task) {
         TaskRespDto resp = new TaskRespDto();
         BeanUtils.copyProperties(task, resp);
         resp.setStatus(task.getLastStatus());
-        // Explicit mapping if names differ, but here they match
         return resp;
     }
-
-
 }

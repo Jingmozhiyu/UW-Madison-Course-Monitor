@@ -4,8 +4,10 @@ import com.jing.monitor.core.CourseCrawler;
 import com.jing.monitor.model.SectionInfo;
 import com.jing.monitor.model.StatusMapping;
 import com.jing.monitor.model.Task;
+import com.jing.monitor.model.User;
 import com.jing.monitor.repository.FileRepository;
 import com.jing.monitor.repository.TaskRepository;
+import com.jing.monitor.repository.UserRepository;
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -33,9 +35,12 @@ public class SchedulerService {
     private final MailService mailService;
     private final FileRepository fileRepository;
     private final TaskRepository taskRepository;
+    private final UserRepository userRepository;
     private final Random random = new Random();
 
-    // Define alert actions
+    /**
+     * Supported alert operations derived from status transitions.
+     */
     enum AlertAction { NONE, SEND_OPEN_EMAIL, SEND_WAITLIST_EMAIL }
 
     /**
@@ -44,88 +49,102 @@ public class SchedulerService {
      */
     @Scheduled(fixedDelayString = "${monitor.poll-interval-ms}")
     public void monitorTask() {
-        // 1. Aggregation: Fetch all tasks and deduplicate by Course ID
-        List<Task> tasks = taskRepository.findByEnabledTrue();
-        Set<String> courseSet = new HashSet<>();
-        for(Task task : tasks){
-            courseSet.add(task.getCourseId());
+        // 1) Build monitoring work units by grouping enabled tasks per (user, course).
+        List<Task> tasks = taskRepository.findByEnabledTrueAndUserIdIsNotNull();
+        Map<Long, Set<String>> userCourseMap = new HashMap<>();
+        for (Task task : tasks) {
+            if (task.getUserId() == null || task.getCourseId() == null) {
+                continue;
+            }
+            userCourseMap.computeIfAbsent(task.getUserId(), k -> new HashSet<>()).add(task.getCourseId());
         }
 
-        if (courseSet.isEmpty()) {
+        if (userCourseMap.isEmpty()) {
             log.info("[Scheduler] No active tasks. Idle.");
             return;
         }
 
-        log.info("[Scheduler] Starting cycle. Monitoring {} unique courses.", courseSet.size());
+        int totalCourses = userCourseMap.values().stream().mapToInt(Set::size).sum();
+        Map<Long, String> userEmailMap = userRepository.findAllById(userCourseMap.keySet()).stream()
+                .collect(Collectors.toMap(User::getId, User::getEmail));
 
-        int cnt = courseSet.size();
-        // 2. Batch Processing: Fetch data per Course (1 Request = N Sections)
-        for (String courseId : courseSet) {
-            processSingleCourse(courseId);
-            cnt--;
-            if(cnt == 0){
-                break;
+        log.info("[Scheduler] Starting cycle. Monitoring {} user-course groups.", totalCourses);
+
+        int processed = 0;
+        // 2) Process each course once per user to reduce external API calls.
+        for (Map.Entry<Long, Set<String>> entry : userCourseMap.entrySet()) {
+            Long userId = entry.getKey();
+            String recipientEmail = userEmailMap.get(userId);
+            if (recipientEmail == null || recipientEmail.isBlank()) {
+                log.warn("[Scheduler] Skipping user {} because email is missing.", userId);
+                continue;
             }
-            try {
-                long sleepTime = 120000 + random.nextInt(10000);
-                Thread.sleep(sleepTime);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+            for (String courseId : entry.getValue()) {
+                processSingleCourse(userId, recipientEmail, courseId);
+                processed++;
+                try {
+                    if (processed < totalCourses) {
+                        long sleepTime = 120000 + random.nextInt(10000);
+                        Thread.sleep(sleepTime);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
     }
 
     /**
      * Fetches all sections for a given course and updates local Task states.
+     * @param userId The owner user id.
+     * @param recipientEmail The owner user email.
      * @param courseId The 6-digit course identifier (e.g., "004289")
      */
-    private void processSingleCourse(String courseId) {
+    private void processSingleCourse(Long userId, String recipientEmail, String courseId) {
         try {
-            // Step 1: Network I/O - Fetch course data
+            // Step 1: Fetch all sections for this course in one external request.
             List<SectionInfo> infos = crawler.fetchCourseStatus(courseId);
 
             if (infos == null) {
-                log.warn("[Scheduler] Fetch failed or blocked for course: {}", courseId);
+                log.warn("[Scheduler] Fetch failed or blocked for user {} course {}", userId, courseId);
                 return;
             }
 
-            // Step 2: DB I/O - Fetch all tasks for this course in one query and build index by sectionId.
-            Map<String, Task> taskMapBySectionId = taskRepository.findAllByCourseId(courseId).stream()
+            // Step 2: Build fast lookup table for user-owned tasks in this course.
+            List<Task> existingTasksForCourse = taskRepository.findAllByCourseIdAndUserId(courseId, userId);
+            Map<String, Task> taskMapBySectionId = existingTasksForCourse.stream()
                     .collect(Collectors.toMap(Task::getSectionId, Function.identity(), (left, right) -> left, HashMap::new));
 
-            // Step 2: Synchronization - Update Database
+            // Step 3: Synchronize section snapshots into owned tasks.
             for (SectionInfo info : infos) {
                 StatusMapping currentStatus = info.getStatus();
                 StatusMapping previousStatus = null;
                 String sectionId = info.getSection();
 
-                // O(1) lookup from in-memory index instead of querying DB per section.
+                // O(1) lookup avoids query-per-section overhead.
                 Task task = taskMapBySectionId.get(sectionId);
 
-                // Logic: Auto-Discovery vs Update
+                // Auto-discovery creates missing sections; existing rows update transition states.
                 if (task == null) {
-                    // Scenario A: New Section Discovered (Auto-add to DB)
-                    // Note: This will monitor ALL sections. If this is spammy, add filtering logic here.
+                    // New section discovered under the same user+course ownership.
                     task = new Task(info.getSubject(), info.getCatalogNumber(), sectionId, courseId, info.getStatus());
+                    task.setUserId(userId);
                     taskMapBySectionId.put(sectionId, task);
                     log.info("[Scheduler] New section found {}. Adding to DB.", info.getSection());
 
-                    // TODO: Optional: Send alert on discovery?
                     AlertAction action = determineAction(null, currentStatus);
-                    Mail(action, info);
+                    dispatchMail(action, recipientEmail, info);
                 } else {
-                    // Scenario B: Existing Task Update
+                    // Existing task transition handling.
                     previousStatus = task.getLastStatus();
-
-                    // Logging state only on changes or verbose debug can go here.
 
                     if (task.isEnabled()) {
                         AlertAction action = determineAction(previousStatus, currentStatus);
-                        Mail(action, info);
+                        dispatchMail(action, recipientEmail, info);
                     }
                 }
 
-                // Step 3: Persistence
+                // Persist only when status changed or task is newly inserted.
                 if (previousStatus != currentStatus || task.getId() == null) {
                     if (task.getId() != null) {
                         log.info("[Scheduler] State changed: {} -> {} for {}", previousStatus, currentStatus, sectionId);
@@ -136,10 +155,17 @@ public class SchedulerService {
                 }
             }
         } catch (Exception e) {
-            log.error("[Scheduler] Error processing course {}", courseId, e);
+            log.error("[Scheduler] Error processing user {} course {}", userId, courseId, e);
         }
     }
 
+    /**
+     * Calculates whether a status transition should trigger an email alert.
+     *
+     * @param prev previous status from DB, or null for new sections
+     * @param curr current status from crawler
+     * @return alert action to execute
+     */
     private AlertAction determineAction(StatusMapping prev, StatusMapping curr) {
         if (prev == null) {
             // Logic for newly discovered tasks (prevent spam on restart)
@@ -159,13 +185,21 @@ public class SchedulerService {
         }
     }
 
-    private void Mail(AlertAction action, SectionInfo info) {
+    /**
+     * Executes email side-effects for the selected alert action.
+     *
+     * @param action transition action
+     * @param recipientEmail recipient email
+     * @param info section data used to format email content
+     */
+    private void dispatchMail(AlertAction action, String recipientEmail, SectionInfo info) {
+        // Future RabbitMQ split: scheduler publishes alert events, dedicated consumer handles email delivery/retry.
         if (action == AlertAction.SEND_OPEN_EMAIL) {
             log.info("[Scheduler] ALERT OPEN detected for {}", info.getSection());
-            mailService.sendCourseOpenAlert(info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
+            mailService.sendCourseOpenAlert(recipientEmail, info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
         } else if (action == AlertAction.SEND_WAITLIST_EMAIL) {
             log.info("[Scheduler] ALERT WAITLIST detected for {}", info.getSection());
-            mailService.sendCourseWaitlistedAlert(info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
+            mailService.sendCourseWaitlistedAlert(recipientEmail, info.getSection(), info.getSubject() + " " + info.getCatalogNumber());
         }
     }
 }

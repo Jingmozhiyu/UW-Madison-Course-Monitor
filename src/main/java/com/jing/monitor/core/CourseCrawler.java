@@ -20,7 +20,8 @@ import java.util.Map;
 
 /**
  * Core component responsible for fetching data from the UW-Madison Enrollment API.
- * * Strategy:
+ * <p>
+ * Strategy:
  * 1. Uses Jsoup for lightweight HTTP requests.
  * 2. Fetches at the COURSE level (api/search/v1/enrollmentPackages/{term}/{subject}/{courseId}).
  * 3. Returns a list of all sections to reduce API call frequency.
@@ -40,8 +41,7 @@ public class CourseCrawler {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // Persistent cookie store. Note: Will be empty on server restart.
-    // Consider adding a method to inject 'aws-waf-token' externally if WAF blocks the first request.
+    // Persistent cookie store for WAF/session continuity.
     private Map<String, String> cookies = new HashMap<>();
 
     /**
@@ -124,6 +124,12 @@ public class CourseCrawler {
         return null;
     }
 
+    /**
+     * Executes keyword search against the UW enrollment search endpoint.
+     *
+     * @param userQueryString user input query such as "COMP SCI 577"
+     * @return parsed search response JSON, or {@code null} when request fails
+     */
     public JsonNode searchCourse(String userQueryString) {
         String searchUrl = "https://public.enroll.wisc.edu/api/search/v1";
 
@@ -179,7 +185,11 @@ public class CourseCrawler {
         }
     }
 
-    // Helper method to manually inject cookies (e.g. from browser dev tools) if needed
+    /**
+     * Merges externally provided cookies into the crawler cookie store.
+     *
+     * @param newCookies cookies to merge
+     */
     public void setCookies(Map<String, String> newCookies) {
         this.cookies.putAll(newCookies);
     }

@@ -15,6 +15,13 @@
         .btn-add { background-color: #28a745; color: white; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; font-weight: bold; }
         .btn-add:hover { background-color: #218838; }
         .btn-add:disabled { background-color: #ccc; cursor: not-allowed; }
+        .auth-box { display: grid; grid-template-columns: 1fr 1fr auto auto auto; gap: 10px; margin-bottom: 20px; padding: 20px; background: #fff6ea; border-radius: 8px; border: 1px solid #f1d1a8; align-items: center; }
+        .auth-box input { padding: 10px; border: 1px solid #d8c3a5; border-radius: 4px; font-size: 14px; }
+        .btn-auth { border: none; padding: 10px 14px; border-radius: 4px; cursor: pointer; font-weight: 600; color: white; }
+        .btn-login { background: #0069d9; }
+        .btn-register { background: #6f42c1; }
+        .btn-logout { background: #dc3545; }
+        .auth-status { margin-bottom: 12px; font-size: 0.9em; color: #666; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #ddd; }
@@ -40,11 +47,20 @@
         .btn-del { background: none; border: none; cursor: pointer; font-size: 1.2em; opacity: 0.6; transition: 0.3s; }
         .btn-del:hover { opacity: 1; transform: scale(1.1); }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="js/axios.min.js"></script>
 </head>
 <body>
     <div class="container">
         <h1>🦡 UW Course Sniper</h1>
+
+        <div class="auth-box">
+            <input type="email" id="emailInput" placeholder="Email" />
+            <input type="password" id="passwordInput" placeholder="Password (min 6 chars)" />
+            <button class="btn-auth btn-login" onclick="login()">Login</button>
+            <button class="btn-auth btn-register" onclick="register()">Register</button>
+            <button class="btn-auth btn-logout" onclick="logout()">Logout</button>
+        </div>
+        <div class="auth-status">Current User: <b id="currentUser">Not logged in</b></div>
 
         <div class="add-box">
             <input type="text" id="searchInput" placeholder="e.g. COMP SCI 577, 76101" />

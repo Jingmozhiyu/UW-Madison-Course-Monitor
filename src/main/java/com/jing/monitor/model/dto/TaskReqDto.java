@@ -2,9 +2,14 @@ package com.jing.monitor.model.dto;
 
 import lombok.Data;
 
+/**
+ * Request DTO used when creating or upserting task records.
+ */
 @Data
 public class TaskReqDto {
-    // Unique Id
+    /**
+     * Section identifier within a course.
+     */
     private String sectionId;
 
     private String courseDisplayName;

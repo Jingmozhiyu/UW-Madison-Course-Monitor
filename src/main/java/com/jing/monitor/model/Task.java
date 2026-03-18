@@ -9,7 +9,12 @@ import lombok.NoArgsConstructor;
  * Maps to the "tasks" table in the MySQL database.
  */
 @Entity
-@Table(name = "tasks")
+@Table(
+        name = "tasks",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_tasks_user_section", columnNames = {"user_id", "section_id"})
+        }
+)
 @Data // Lombok: Generates Getters, Setters, toString, etc.
 @NoArgsConstructor
 public class Task {
@@ -19,10 +24,17 @@ public class Task {
     private Long id;
 
     /**
-     * The 5-digit unique section ID (e.g., "60035").
-     * Defined as unique to prevent duplicate monitoring tasks for the same section.
+     * Owner user id.
+     * Each task belongs to one user account.
      */
-    @Column(nullable = false, unique = true)
+    @Column(name = "user_id")
+    private Long userId;
+
+    /**
+     * The 5-digit unique section ID (e.g., "60035").
+     * Uniqueness is enforced together with {@code user_id}.
+     */
+    @Column(nullable = false)
     private String sectionId;
 
     /**
@@ -47,6 +59,15 @@ public class Task {
     @Enumerated(EnumType.STRING) // Best practice: Store Enum as String in DB for readability
     private StatusMapping lastStatus;
 
+    /**
+     * Convenience constructor used by scheduler auto-discovery.
+     *
+     * @param subject subject short name
+     * @param catalogNumber catalog number
+     * @param sectionId section id
+     * @param courseId course id
+     * @param lastStatus current status
+     */
     public Task(String subject, String catalogNumber, String sectionId, String courseId, StatusMapping lastStatus) {
         this.sectionId = sectionId;
         this.courseId = courseId;
