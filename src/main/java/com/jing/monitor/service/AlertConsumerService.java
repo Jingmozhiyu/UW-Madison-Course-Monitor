@@ -1,7 +1,5 @@
 package com.jing.monitor.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jing.monitor.model.AlertDeadLetter;
 import com.jing.monitor.model.AlertDeliveryLog;
 import com.jing.monitor.model.AlertType;
@@ -31,7 +29,7 @@ public class AlertConsumerService {
     private final MailService mailService;
     private final AlertDeadLetterRepository alertDeadLetterRepository;
     private final AlertDeliveryLogRepository alertDeliveryLogRepository;
-    private final ObjectMapper objectMapper;
+    private final MailCounterService mailCounterService;
 
     @Value("${app.rabbitmq.queue}")
     private String alertQueueName;
@@ -53,6 +51,7 @@ public class AlertConsumerService {
             }
 
             saveDeliveryLogQuietly(event);
+            mailCounterService.recordSuccessfulSend(event);
         } catch (Exception e) {
             log.error("[AlertConsumer] Mail send failed for event {} on queue {}", event.getEventId(), alertQueueName, e);
             throw new AmqpRejectAndDontRequeueException("Mail send failed: " + e.getMessage(), e);
@@ -78,8 +77,9 @@ public class AlertConsumerService {
         deadLetter.setReason(extractDeadLetterReason(message));
         deadLetter.setSourceQueue(extractSourceQueue(message));
         deadLetter.setCreatedAt(LocalDateTime.now());
-        deadLetter.setPayloadJson(serializePayload(event));
+        deadLetter.setPayloadJson(extractPayloadJson(message));
         alertDeadLetterRepository.save(deadLetter);
+        mailCounterService.recordDeadLetter(event);
 
         log.error("[AlertConsumer] Dead letter saved for event {} from queue {} with reason {}",
                 deadLetter.getEventId(), deadLetter.getSourceQueue(), deadLetter.getReason());
@@ -110,12 +110,12 @@ public class AlertConsumerService {
         return message.getMessageProperties().getConsumerQueue();
     }
 
-    private String serializePayload(AlertEvent event) {
-        try {
-            return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
-            return "{\"serializationError\":\"" + e.getMessage() + "\"}";
+    private String extractPayloadJson(Message message) {
+        byte[] body = message.getBody();
+        if (body == null || body.length == 0) {
+            return "{}";
         }
+        return new String(body);
     }
 
     private void saveDeliveryLogQuietly(AlertEvent event) {

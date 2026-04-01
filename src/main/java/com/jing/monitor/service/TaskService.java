@@ -14,9 +14,11 @@ import com.jing.monitor.repository.UserRepository;
 import com.jing.monitor.repository.UserSectionSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import java.util.Locale;
 
 /**
  * Application service for authenticated section search and subscription management.
@@ -33,12 +36,15 @@ import java.util.stream.Collectors;
 @Slf4j
 public class TaskService {
 
+    private static final Duration SEARCH_MISS_TTL = Duration.ofMinutes(2);
+
     private final CourseCrawler crawler;
     private final CourseRepository courseRepository;
     private final CourseSectionRepository courseSectionRepository;
     private final UserSectionSubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final AuthContextService authContextService;
+    private final StringRedisTemplate redisTemplate;
 
     /**
      * Returns all section subscriptions owned by the current authenticated user.
@@ -63,14 +69,21 @@ public class TaskService {
      */
     @Transactional
     public List<TaskRespDto> searchCourse(String courseName) {
+        String normalizedQuery = normalizeCourseQuery(courseName);
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(buildSearchMissKey(normalizedQuery)))) {
+            throw new RuntimeException("Course not found: " + courseName);
+        }
+
         JsonNode root = crawler.searchCourse(courseName);
         if (root == null || root.path("found").asInt() == 0) {
+            rememberSearchMiss(normalizedQuery);
             throw new RuntimeException("Course not found: " + courseName);
         }
 
         JsonNode firstHit = root.path("hits").get(0);
         String foundName = firstHit.path("courseDesignation").asText();
         if (!foundName.replace(" ", "").equalsIgnoreCase(courseName.replace(" ", ""))) {
+            rememberSearchMiss(normalizedQuery);
             throw new RuntimeException("Wrong input / Course not found: " + courseName);
         }
 
@@ -100,6 +113,7 @@ public class TaskService {
      */
     @Transactional
     public TaskRespDto addSection(String sectionId) {
+        requireValidSectionId(sectionId);
         UUID userId = authContextService.currentUserId();
         CourseSection section = courseSectionRepository.findBySectionId(sectionId)
                 .orElseThrow(() -> new RuntimeException("Section not found. Search before adding: " + sectionId));
@@ -126,6 +140,7 @@ public class TaskService {
      */
     @Transactional
     public void deleteTask(String sectionId) {
+        requireValidSectionId(sectionId);
         UUID userId = authContextService.currentUserId();
         UserSectionSubscription sub = subscriptionRepository.findByUser_IdAndSection_SectionId(userId, sectionId)
                 .orElseThrow(() -> new RuntimeException("Subscription not found for section: " + sectionId));
@@ -236,5 +251,36 @@ public class TaskService {
                 ? course.getSubjectCode()
                 : course.getSubjectShortName();
         return subject + " " + course.getCatalogNumber();
+    }
+
+    /**
+     * Enforces the canonical section id format expected by add and delete operations.
+     *
+     * @param sectionId frontend-provided business section id
+     */
+    private void requireValidSectionId(String sectionId) {
+        if (sectionId == null || !sectionId.matches("\\d{5}")) {
+            throw new RuntimeException("Section id must be a 5-digit number.");
+        }
+    }
+
+    /**
+     * Stores a short-lived negative cache entry for a clearly invalid course query.
+     *
+     * @param normalizedQuery normalized user query
+     */
+    private void rememberSearchMiss(String normalizedQuery) {
+        redisTemplate.opsForValue().set(buildSearchMissKey(normalizedQuery), "1", SEARCH_MISS_TTL);
+    }
+
+    private String buildSearchMissKey(String normalizedQuery) {
+        return "search:miss:" + normalizedQuery;
+    }
+
+    private String normalizeCourseQuery(String courseName) {
+        if (courseName == null) {
+            return "";
+        }
+        return courseName.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
     }
 }

@@ -7,7 +7,7 @@ import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
+import org.springframework.amqp.support.converter.JacksonJsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -65,7 +65,7 @@ public class RabbitMqConfig {
     @Bean
     public MessageConverter rabbitMessageConverter() {
         // Serialize AlertEvent as JSON so publisher and consumer share a stable payload shape.
-        return new Jackson2JsonMessageConverter();
+        return new JacksonJsonMessageConverter();
     }
 
     @Bean

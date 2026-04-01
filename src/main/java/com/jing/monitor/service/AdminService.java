@@ -13,6 +13,7 @@ import com.jing.monitor.model.dto.AdminTestEmailReqDto;
 import com.jing.monitor.model.dto.AdminUserSubsRespDto;
 import com.jing.monitor.model.dto.AlertDeadLetterRespDto;
 import com.jing.monitor.model.dto.AlertDeliveryLogRespDto;
+import com.jing.monitor.model.dto.MailDailyStatRespDto;
 import com.jing.monitor.repository.AlertDeadLetterRepository;
 import com.jing.monitor.repository.AlertDeliveryLogRepository;
 import com.jing.monitor.repository.UserRepository;
@@ -39,6 +40,7 @@ public class AdminService {
     private final AlertDeadLetterRepository alertDeadLetterRepository;
     private final AlertDeliveryLogRepository alertDeliveryLogRepository;
     private final AlertPublisherService alertPublisherService;
+    private final MailCounterService mailCounterService;
     private final AuthContextService authContextService;
 
     /**
@@ -114,6 +116,17 @@ public class AdminService {
                 .sorted(Comparator.comparing(AlertDeliveryLog::getSentAt).reversed())
                 .map(this::toDeliveryLogResp)
                 .toList();
+    }
+
+    /**
+     * Returns persisted daily mail counter snapshots for admin reporting.
+     *
+     * @return daily mail statistics ordered from newest to oldest
+     */
+    @Transactional(readOnly = true)
+    public List<MailDailyStatRespDto> getMailDailyStats() {
+        requireAdmin();
+        return mailCounterService.getPersistedDailyStats();
     }
 
     /**

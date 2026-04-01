@@ -6,6 +6,7 @@ import com.jing.monitor.model.dto.AdminTestEmailReqDto;
 import com.jing.monitor.model.dto.AdminUserSubsRespDto;
 import com.jing.monitor.model.dto.AlertDeadLetterRespDto;
 import com.jing.monitor.model.dto.AlertDeliveryLogRespDto;
+import com.jing.monitor.model.dto.MailDailyStatRespDto;
 import com.jing.monitor.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -67,6 +68,16 @@ public class AdminController {
     @GetMapping("/mail-deliveries")
     public Result<List<AlertDeliveryLogRespDto>> listMailDeliveries() {
         return Result.success(adminService.getMailDeliveries());
+    }
+
+    /**
+     * Lists persisted daily mail counter snapshots.
+     *
+     * @return daily mail statistics
+     */
+    @GetMapping("/mail-stats")
+    public Result<List<MailDailyStatRespDto>> listMailStats() {
+        return Result.success(adminService.getMailDailyStats());
     }
 
     /**

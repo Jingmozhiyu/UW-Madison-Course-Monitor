@@ -1,6 +1,7 @@
 package com.jing.monitor.config;
 
 import com.jing.monitor.security.JwtAuthenticationFilter;
+import com.jing.monitor.security.RateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -33,11 +34,16 @@ public class SecurityConfig {
      *
      * @param http the HttpSecurity object to configure
      * @param jwtAuthenticationFilter the custom JWT filter for token verification
+     * @param rateLimitFilter the Redis-backed rate limit filter
      * @return the configured SecurityFilterChain
      * @throws Exception if an error occurs during configuration
      */
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            RateLimitFilter rateLimitFilter
+    ) throws Exception {
         http
                 // Disable CSRF protection as we are using token-based authentication (stateless),
                 // which is not vulnerable to CSRF attacks.
@@ -76,6 +82,7 @@ public class SecurityConfig {
 
                 // Insert the custom JWT filter BEFORE the standard UsernamePasswordAuthenticationFilter
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+                .addFilterAfter(rateLimitFilter, JwtAuthenticationFilter.class)
 
                 // Handle authentication exceptions (e.g., missing or invalid JWT)
                 .exceptionHandling(exception -> exception.authenticationEntryPoint((request, response, ex) -> {

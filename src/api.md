@@ -225,6 +225,30 @@ Response `data`: `AlertDeliveryLogRespDto[]`
 ]
 ```
 
+### `GET /api/admin/mail-stats`
+
+Meaning:
+- List persisted daily mail statistics flushed from Redis into the database
+
+Response `data`: `MailDailyStatRespDto[]`
+
+```json
+[
+  {
+    "id": "daily-stat-uuid",
+    "statsDate": "2026-04-01",
+    "sentTotal": 12,
+    "sentOpen": 8,
+    "sentWaitlist": 4,
+    "sentManualTest": 1,
+    "deadTotal": 2,
+    "deadOpen": 1,
+    "deadWaitlist": 1,
+    "deadManualTest": 0
+  }
+]
+```
+
 ### `POST /api/admin/test-email`
 
 Meaning:
