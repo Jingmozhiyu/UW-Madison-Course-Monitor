@@ -110,7 +110,7 @@ public class RateLimitService {
 
         String path = request.getServletPath();
         if (path != null && path.startsWith("/api/admin")) {
-            return ipRule("admin_api", 60, 60_000L, 500, 24 * 60 * 60_000L);
+            return ipRule("admin_api", 50, 60_000L, 500, 24 * 60 * 60_000L);
         }
 
         return null;
