@@ -50,6 +50,7 @@ public class MailService {
             log.info("[Mail] OPEN alert email sent successfully for section {} to {}", section, recipientEmail);
         } catch (Exception e) {
             log.error("[Mail] Failed to send OPEN alert email for section {} to {}", section, recipientEmail, e);
+            throw new IllegalStateException("Failed to send OPEN alert email.", e);
         }
     }
 
@@ -74,6 +75,7 @@ public class MailService {
             log.info("[Mail] WAITLIST alert email sent successfully for section {} to {}", section, recipientEmail);
         } catch (Exception e) {
             log.error("[Mail] Failed to send WAITLIST alert email for section {} to {}", section, recipientEmail, e);
+            throw new IllegalStateException("Failed to send WAITLIST alert email.", e);
         }
     }
 

@@ -1,0 +1,50 @@
+package com.jing.monitor.service;
+
+import com.jing.monitor.model.AlertType;
+import com.jing.monitor.model.event.AlertEvent;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
+
+/**
+ * Publishes alert events to RabbitMQ for asynchronous mail delivery.
+ */
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class AlertPublisherService {
+
+    private final RabbitTemplate rabbitTemplate;
+
+    @Value("${app.rabbitmq.exchange}")
+    private String alertExchangeName;
+
+    @Value("${app.rabbitmq.routing-key}")
+    private String alertRoutingKey;
+
+    /**
+     * Publishes one alert event for asynchronous processing.
+     *
+     * @param alertType alert category
+     * @param recipientEmail email recipient
+     * @param sectionId section identifier
+     * @param courseDisplayName display name rendered in the email
+     */
+    public void publishAlert(AlertType alertType, String recipientEmail, String sectionId, String courseDisplayName) {
+        AlertEvent event = new AlertEvent();
+        event.setEventId(UUID.randomUUID());
+        event.setAlertType(alertType);
+        event.setRecipientEmail(recipientEmail);
+        event.setSectionId(sectionId);
+        event.setCourseDisplayName(courseDisplayName);
+        event.setCreatedAt(LocalDateTime.now());
+
+        rabbitTemplate.convertAndSend(alertExchangeName, alertRoutingKey, event);
+        log.info("[AlertPublisher] Published {} alert event {} for section {} to {}", alertType, event.getEventId(), sectionId, recipientEmail);
+    }
+}

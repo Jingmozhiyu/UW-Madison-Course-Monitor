@@ -3,6 +3,7 @@ package com.jing.monitor.controller;
 import com.jing.monitor.common.Result;
 import com.jing.monitor.model.dto.AdminSectionSubRespDto;
 import com.jing.monitor.model.dto.AdminUserSubsRespDto;
+import com.jing.monitor.model.dto.AlertDeadLetterRespDto;
 import com.jing.monitor.service.AdminService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -44,5 +45,15 @@ public class AdminController {
             @RequestParam boolean enabled
     ) {
         return Result.success(adminService.updateSubscriptionEnabled(subscriptionId, enabled));
+    }
+
+    /**
+     * Lists persisted dead-letter events for manual inspection.
+     *
+     * @return dead-letter records
+     */
+    @GetMapping("/dead-letters")
+    public Result<List<AlertDeadLetterRespDto>> listDeadLetters() {
+        return Result.success(adminService.getDeadLetters());
     }
 }

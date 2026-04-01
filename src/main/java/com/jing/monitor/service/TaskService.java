@@ -114,7 +114,7 @@ public class TaskService {
         UserSectionSubscription sub = new UserSectionSubscription();
         sub.setUser(user);
         sub.setSection(section);
-        sub.setEnabled(false);
+        sub.setEnabled(true);
         UserSectionSubscription savedSub = subscriptionRepository.save(sub);
         return toSubscribedResp(savedSub);
     }

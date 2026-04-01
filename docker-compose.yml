@@ -8,6 +8,7 @@ services:
       - "8080:8080" # 左边是 Mac 端口，右边是容器端口
     depends_on:
       - mysqldb # 必须等数据库启动了再启动我
+      - rabbitmq
     environment:
       # 🔥 关键点：覆盖 application.properties 里的配置
       # 在 Docker 内部，localhost 指的是容器自己。
@@ -16,6 +17,10 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: root_password # 对应下面 DB 的密码
       SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
 
   # 服务 2: MySQL 数据库
   mysqldb:
@@ -29,6 +34,15 @@ services:
       MYSQL_DATABASE: course_monitor_db
     volumes:
       - db_data:/var/lib/mysql # 数据持久化，防止重启 Docker 数据丢失
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
 
 volumes:
   db_data:

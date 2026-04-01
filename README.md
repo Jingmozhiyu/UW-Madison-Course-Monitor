@@ -21,6 +21,12 @@ MAIL_ADDRESS=your_email@example.com
 MAIL_AUTH_CODE=your_mail_auth_code
 JWT_SECRET=your_jwt_secret
 DB_PASSWORD=your_database_password
+ADMIN_EMAIL=your_admin_email
+ADMIN_PASSWORD=your_admin_password
+RABBITMQ_HOST=your_rabbitmq_host
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=your_rabbitmq_username
+RABBITMQ_PASSWORD=your_rabbitmq_password
 # (Optional)
 DB_USERNAME=root
 ```
@@ -50,6 +56,12 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - MAIL_ADDRESS=${MAIL_ADDRESS}
       - MAIL_AUTH_CODE=${MAIL_AUTH_CODE}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
     volumes:
       - ./app.jar:/app.jar
     command: ["java", "-Xmx512m", "-jar", "/app.jar"]
@@ -71,6 +83,17 @@ services:
       - caddy_config:/config
     depends_on:
       - app
+
+  # 4. RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
 
 volumes:
   caddy_data:

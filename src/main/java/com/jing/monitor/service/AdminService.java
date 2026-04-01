@@ -1,5 +1,6 @@
 package com.jing.monitor.service;
 
+import com.jing.monitor.model.AlertDeadLetter;
 import com.jing.monitor.model.Course;
 import com.jing.monitor.model.CourseSection;
 import com.jing.monitor.model.User;
@@ -7,6 +8,8 @@ import com.jing.monitor.model.UserRole;
 import com.jing.monitor.model.UserSectionSubscription;
 import com.jing.monitor.model.dto.AdminSectionSubRespDto;
 import com.jing.monitor.model.dto.AdminUserSubsRespDto;
+import com.jing.monitor.model.dto.AlertDeadLetterRespDto;
+import com.jing.monitor.repository.AlertDeadLetterRepository;
 import com.jing.monitor.repository.UserRepository;
 import com.jing.monitor.repository.UserSectionSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +31,7 @@ public class AdminService {
 
     private final UserRepository userRepository;
     private final UserSectionSubscriptionRepository subscriptionRepository;
+    private final AlertDeadLetterRepository alertDeadLetterRepository;
     private final AuthContextService authContextService;
 
     /**
@@ -77,6 +81,20 @@ public class AdminService {
         return toAdminSubResp(savedSub);
     }
 
+    /**
+     * Returns persisted dead-letter records so an admin can review failed alerts.
+     *
+     * @return dead-letter records ordered from newest to oldest
+     */
+    @Transactional(readOnly = true)
+    public List<AlertDeadLetterRespDto> getDeadLetters() {
+        requireAdmin();
+        return alertDeadLetterRepository.findAll().stream()
+                .sorted(Comparator.comparing(AlertDeadLetter::getCreatedAt).reversed())
+                .map(this::toDeadLetterResp)
+                .toList();
+    }
+
     private void requireAdmin() {
         UUID currentUserId = authContextService.currentUserId();
         User currentUser = userRepository.findById(currentUserId)
@@ -112,5 +130,20 @@ public class AdminService {
                 ? course.getSubjectCode()
                 : course.getSubjectShortName();
         return subject + " " + course.getCatalogNumber();
+    }
+
+    private AlertDeadLetterRespDto toDeadLetterResp(AlertDeadLetter deadLetter) {
+        AlertDeadLetterRespDto dto = new AlertDeadLetterRespDto();
+        dto.setId(deadLetter.getId());
+        dto.setEventId(deadLetter.getEventId());
+        dto.setAlertType(deadLetter.getAlertType());
+        dto.setRecipientEmail(deadLetter.getRecipientEmail());
+        dto.setSectionId(deadLetter.getSectionId());
+        dto.setCourseDisplayName(deadLetter.getCourseDisplayName());
+        dto.setReason(deadLetter.getReason());
+        dto.setSourceQueue(deadLetter.getSourceQueue());
+        dto.setCreatedAt(deadLetter.getCreatedAt());
+        dto.setPayloadJson(deadLetter.getPayloadJson());
+        return dto;
     }
 }

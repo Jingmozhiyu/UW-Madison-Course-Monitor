@@ -1,6 +1,7 @@
 package com.jing.monitor.service;
 
 import com.jing.monitor.core.CourseCrawler;
+import com.jing.monitor.model.AlertType;
 import com.jing.monitor.model.Course;
 import com.jing.monitor.model.CourseSection;
 import com.jing.monitor.model.SectionInfo;
@@ -31,7 +32,7 @@ import java.util.stream.Collectors;
 public class SchedulerService {
 
     private final CourseCrawler crawler;
-    private final MailService mailService;
+    private final AlertPublisherService alertPublisherService;
     private final FileRepository fileRepository;
     private final CourseRepository courseRepository;
     private final CourseSectionRepository courseSectionRepository;
@@ -173,7 +174,7 @@ public class SchedulerService {
     }
 
     /**
-     * Sends the selected email side effect for one subscribed user.
+     * Publishes one alert event for the async mail worker.
      *
      * @param action chosen alert action
      * @param recipientEmail notification recipient
@@ -182,10 +183,10 @@ public class SchedulerService {
     private void dispatchMail(AlertAction action, String recipientEmail, SectionInfo info) {
         if (action == AlertAction.SEND_OPEN_EMAIL) {
             log.info("[Scheduler] ALERT OPEN detected for {}", info.getSectionId());
-            mailService.sendCourseOpenAlert(recipientEmail, info.getSectionId(), info.getCourseDisplayName());
+            alertPublisherService.publishAlert(AlertType.OPEN, recipientEmail, info.getSectionId(), info.getCourseDisplayName());
         } else if (action == AlertAction.SEND_WAITLIST_EMAIL) {
             log.info("[Scheduler] ALERT WAITLIST detected for {}", info.getSectionId());
-            mailService.sendCourseWaitlistedAlert(recipientEmail, info.getSectionId(), info.getCourseDisplayName());
+            alertPublisherService.publishAlert(AlertType.WAITLIST, recipientEmail, info.getSectionId(), info.getCourseDisplayName());
         }
     }
 
