@@ -81,6 +81,10 @@ Response `data`: `TaskRespDto[]`
     "subjectCode": "266",
     "catalogNumber": "240",
     "courseDisplayName": "COMP SCI 240",
+    "openSeats": 7,
+    "capacity": 24,
+    "waitlistSeats": 3,
+    "waitlistCapacity": 3,
     "meetingInfo": "[{\"meetingDays\":\"TR\",\"meetingTimeStart\":73800000,\"meetingTimeEnd\":78300000}]",
     "status": "OPEN",
     "enabled": true
@@ -95,6 +99,7 @@ Meaning:
 - Sync backend data
 - Return sections to frontend
 - Does not create subscription
+- Works for any subject supported by the UW search API, not only `COMP SCI`
 
 Query params:
 - `courseName`: string
@@ -104,6 +109,28 @@ Response `data`: `TaskRespDto[]`
 Notes:
 - If current user already subscribed to a returned section, `id` will be that subscription UUID and `enabled` reflects current state
 - If not subscribed, `id` is `null` and `enabled` is `false`
+
+Example response:
+
+```json
+[
+  {
+    "id": null,
+    "sectionId": "69079",
+    "courseId": "026032",
+    "subjectCode": "266",
+    "catalogNumber": "571",
+    "courseDisplayName": "COMP SCI 571",
+    "openSeats": 14,
+    "capacity": 24,
+    "waitlistSeats": 0,
+    "waitlistCapacity": 0,
+    "meetingInfo": "[{\"meetingDays\":\"TR\",\"meetingTimeStart\":55800000,\"meetingTimeEnd\":60300000}]",
+    "status": "OPEN",
+    "enabled": false
+  }
+]
+```
 
 ### `POST /api/tasks?sectionId=66400`
 
@@ -117,6 +144,9 @@ Body:
 - None
 
 Response `data`: `TaskRespDto`
+
+Notes:
+- Returns the same `TaskRespDto` shape as `GET /api/tasks`, including seat fields
 
 ### `DELETE /api/tasks?sectionId=66400`
 

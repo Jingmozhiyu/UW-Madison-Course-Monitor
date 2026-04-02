@@ -16,6 +16,10 @@ public class TaskRespDto {
     private String subjectCode;
     private String catalogNumber;
     private String courseDisplayName;
+    private Integer openSeats;
+    private Integer capacity;
+    private Integer waitlistSeats;
+    private Integer waitlistCapacity;
     private String meetingInfo;
     private StatusMapping status;
     private boolean enabled;

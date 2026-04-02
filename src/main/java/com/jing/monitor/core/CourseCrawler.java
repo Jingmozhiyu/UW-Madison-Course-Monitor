@@ -32,9 +32,6 @@ public class CourseCrawler {
     @Value("${uw-api.term-id}")
     private String termId;
 
-    @Value("${uw-api.subject-id}")
-    private String subjectId;
-
     @Value("${uw-api.user-agent}")
     private String userAgent;
 
@@ -46,10 +43,10 @@ public class CourseCrawler {
      * @param courseId The 6-digit course identifier (e.g. 004289).
      * @return List of SectionInfo objects, or null if fetch fails.
      */
-    public List<SectionInfo> fetchCourseStatus(String courseId) {
+    public List<SectionInfo> fetchCourseStatus(String subjectCode, String courseId) {
         // Construct the GET endpoint for course-level details
         String url = String.format("https://public.enroll.wisc.edu/api/search/v1/enrollmentPackages/%s/%s/%s",
-                termId, subjectId, courseId);
+                termId, subjectCode, courseId);
 
         try {
             Connection conn = Jsoup.connect(url)
@@ -139,7 +136,7 @@ public class CourseCrawler {
                 node.path("termCode").asText(termId),
                 node.path("courseId").asText(fallbackCourseId),
                 sectionId,
-                node.path("subjectCode").asText(subjectNode.path("subjectCode").asText(subjectId)),
+                node.path("subjectCode").asText(subjectNode.path("subjectCode").asText()),
                 subjectNode.path("shortDescription").asText(),
                 node.path("catalogNumber").asText(representativeSectionNode.path("catalogNumber").asText()),
                 parseStatus(packageStatusNode.path("status").asText(), openSeats, waitlistSeats),

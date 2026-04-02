@@ -54,7 +54,7 @@ public class SchedulerService {
     private final CourseSectionRepository courseSectionRepository;
     private final UserSectionSubscriptionRepository subscriptionRepository;
 
-    private final Queue<String> dueCourseQueue = new ArrayDeque<>();
+    private final Queue<QueuedCourse> dueCourseQueue = new ArrayDeque<>();
     private final Set<String> queuedCourseIds = new HashSet<>();
     private volatile LocalDateTime lastHeartbeatAt;
     private volatile LocalDateTime lastFetchStartedAt;
@@ -87,7 +87,7 @@ public class SchedulerService {
             if (!subscriptionRepository.existsByEnabledTrueAndSection_Course_CourseId(course.getCourseId())) {
                 continue;
             }
-            if (enqueueCourseIfAbsent(course.getCourseId())) {
+            if (enqueueCourseIfAbsent(course.getCourseId(), course.getSubjectCode())) {
                 enqueuedCount++;
             }
         }
@@ -103,11 +103,12 @@ public class SchedulerService {
      */
     @Scheduled(fixedDelayString = "${monitor.scheduler-fetch-interval-ms:3000}")
     public void consumeDueCourseQueue() {
-        String courseId = pollNextCourseId();
-        if (courseId == null) {
+        QueuedCourse q = pollNextCourseId();
+        if (q == null) {
             return;
         }
-
+        String courseId = q.courseId;
+        String subjectCode = q.subjectCode;
         lastFetchStartedAt = LocalDateTime.now();
         lastFetchedCourseId = courseId;
 
@@ -118,7 +119,7 @@ public class SchedulerService {
             return;
         }
 
-        processSingleCourse(courseId, subs, LocalDateTime.now());
+        processSingleCourse(subjectCode, courseId, subs, LocalDateTime.now());
         lastFetchFinishedAt = LocalDateTime.now();
     }
 
@@ -130,7 +131,7 @@ public class SchedulerService {
      * @param subs enabled subscriptions that belong to this course
      * @param polledAt current heartbeat timestamp shared by this course poll
      */
-    private void processSingleCourse(String courseId, List<UserSectionSubscription> subs, LocalDateTime polledAt) {
+    private void processSingleCourse(String subjectId, String courseId, List<UserSectionSubscription> subs, LocalDateTime polledAt) {
         Course course = resolveCourse(subs);
         if (course == null) {
             log.warn("[Scheduler] Skipping course {} because no canonical course row could be resolved.", courseId);
@@ -138,7 +139,7 @@ public class SchedulerService {
         }
 
         try {
-            List<SectionInfo> infos = crawler.fetchCourseStatus(courseId);
+            List<SectionInfo> infos = crawler.fetchCourseStatus(subjectId, courseId);
             if (infos == null || infos.isEmpty()) {
                 log.warn("[Scheduler] Fetch failed or returned empty data for course {}", courseId);
                 scheduleAfterFailure(course, polledAt);
@@ -278,11 +279,12 @@ public class SchedulerService {
      * @param courseId UW 6-digit course id
      * @return true when the course was newly enqueued
      */
-    private synchronized boolean enqueueCourseIfAbsent(String courseId) {
+    private synchronized boolean enqueueCourseIfAbsent(String courseId, String subjectCode) {
+        QueuedCourse q = new QueuedCourse(courseId,subjectCode);
         if (!queuedCourseIds.add(courseId)) {
             return false;
         }
-        dueCourseQueue.offer(courseId);
+        dueCourseQueue.offer(q);
         return true;
     }
 
@@ -291,12 +293,12 @@ public class SchedulerService {
      *
      * @return next course id, or null when the queue is empty
      */
-    private synchronized String pollNextCourseId() {
-        String courseId = dueCourseQueue.poll();
-        if (courseId != null) {
-            queuedCourseIds.remove(courseId);
+    private synchronized QueuedCourse pollNextCourseId() {
+        QueuedCourse q = dueCourseQueue.poll();
+        if (q != null) {
+            queuedCourseIds.remove(q.courseId());
         }
-        return courseId;
+        return q;
     }
 
     /**
@@ -491,12 +493,14 @@ public class SchedulerService {
         dto.setActiveCourseCount(subscriptionRepository.countDistinctEnabledCourses());
         dto.setDueCourseCount(courseRepository.countDueForPolling(now));
         dto.setQueueSize(dueCourseQueue.size());
-        dto.setQueuedCourseIds(List.copyOf(dueCourseQueue));
+        dto.setQueuedCourseIds(List.copyOf(dueCourseQueue.stream().map(QueuedCourse::courseId).toList()));
         dto.setLastHeartbeatAt(lastHeartbeatAt);
         dto.setLastFetchStartedAt(lastFetchStartedAt);
         dto.setLastFetchFinishedAt(lastFetchFinishedAt);
         dto.setLastFetchedCourseId(lastFetchedCourseId);
         return dto;
     }
+
+    public record QueuedCourse(String courseId, String subjectCode){}
 
 }

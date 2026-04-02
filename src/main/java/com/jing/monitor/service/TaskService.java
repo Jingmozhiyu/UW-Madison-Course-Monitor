@@ -88,8 +88,9 @@ public class TaskService {
             throw new RuntimeException("Wrong input / Course not found: " + courseName);
         }
 
+        String subjectId = firstHit.path("subject").path("subjectCode").asText();
         String courseId = firstHit.path("courseId").asText();
-        List<SectionInfo> infos = crawler.fetchCourseStatus(courseId);
+        List<SectionInfo> infos = crawler.fetchCourseStatus(subjectId, courseId);
         if (infos == null || infos.isEmpty()) {
             throw new RuntimeException("Course details unavailable: " + courseName);
         }
@@ -238,6 +239,10 @@ public class TaskService {
         resp.setSubjectCode(course.getSubjectCode());
         resp.setCatalogNumber(course.getCatalogNumber());
         resp.setCourseDisplayName(buildCourseDisplayName(course));
+        resp.setOpenSeats(section.getOpenSeats());
+        resp.setCapacity(section.getCapacity());
+        resp.setWaitlistSeats(section.getWaitlistSeats());
+        resp.setWaitlistCapacity(section.getWaitlistCapacity());
         resp.setMeetingInfo(section.getMeetingInfo());
         resp.setStatus(section.getLastStatus());
         resp.setEnabled(sub != null && sub.isEnabled());
