@@ -1,122 +1,116 @@
 # UW Track
 
-UW Track is a backend notification system designed to monitor course seat availability at the University of Wisconsin-Madison (UW-Madison).
+UW Track is a course seat monitoring system for the University of Wisconsin-Madison.
+It lets users search courses, subscribe to specific sections, and receive email alerts when a section becomes `WAITLISTED` or `OPEN`.
 
-Built with Spring Boot, the system relies on scheduled Java tasks to periodically fetch course data from `public.enroll.wisc.edu`. It tracks status changes of specific course sections and alerts users via email. MySQL is used to persist application states and log historical course data.
+Frontend:
+- [mad-enroll.vercel.app](https://mad-enroll.vercel.app)
 
-* **Frontend Platform:** [mad-enroll.vercel.app](https://mad-enroll.vercel.app)
-* **Frontend Repository:** [Jingmozhiyu/mad-enroll](https://github.com/Jingmozhiyu/mad-enroll)
+Frontend repository:
+- [Jingmozhiyu/mad-enroll](https://github.com/Jingmozhiyu/mad-enroll)
 
----
+## Tech Stack
+
+- Java 21
+- Spring Boot 4
+- Spring MVC
+- Spring Security + JWT
+- Spring Data JPA + MySQL
+- RabbitMQ
+- Redis
+- Spring Mail / SMTP
+- Jsoup + Jackson
+- Docker Compose
+- Caddy
+
+## Update Logs
+
+### 4/1/2026
+This project was refactored across many aspects.
+
+Main changes:
+- Reworked the data model from the old task-centric structure to `users`, `courses`, `course_sections`, and `user_section_subscriptions`
+- Changed polling from per-user fetching to course-level deduplicated crawling
+- Added dynamic polling with `nextPollAt` and a queue-based fixed-rate scheduler
+- Introduced RabbitMQ for asynchronous email delivery and dead-letter handling
+- Added Redis-backed rate limiting, search miss caching, and daily mail counters
+- Split user APIs and admin APIs more clearly
+- Added admin monitoring endpoints for subscriptions, dead letters, mail deliveries, mail stats, and scheduler status
+- Completed Docker Compose + Caddy deployment files so the project is close to plug-and-play on a VM
+
+In short, 4.2 turned the project from a basic monitor into a more production-oriented system with better structure, observability, safety, and deployment readiness.
 
 ## Deployment
 
-### Deploy on VM
+The repository already includes the required deployment files:
+- `.env.example`
+- `docker-compose.yml`
+- `Caddyfile`
 
-Deploying via **Docker** is highly recommended.
+### 1. Edit environment values
 
-**1. Create a `.env` file** in the project root with the following variables:
-```env
-MAIL_ADDRESS=your_email@example.com
-MAIL_AUTH_CODE=your_mail_auth_code
-JWT_SECRET=your_jwt_secret
-DB_PASSWORD=your_database_password
-ADMIN_EMAIL=your_admin_email
-ADMIN_PASSWORD=your_admin_password
-RABBITMQ_HOST=your_rabbitmq_host
-RABBITMQ_PORT=5672
-RABBITMQ_USERNAME=your_rabbitmq_username
-RABBITMQ_PASSWORD=your_rabbitmq_password
-# (Optional)
-DB_USERNAME=root
+Copy `.env.example` to `.env`, then fill in your real values:
+
+```bash
+cp .env.example .env
 ```
 
-**2. Create the `docker-compose.yml`** on your remote server:
-```yaml
-services:
-  # 1. Database
-  db:
-    image: mysql:8.0
-    restart: always
-    environment:
-      MYSQL_DATABASE: course_monitor_db
-      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
-    ports:
-      - "3306:3306"
-    command: --default-authentication-plugin=mysql_native_password
+- `MAIL_ADDRESS`
+- `MAIL_AUTH_CODE`
+- `DB_PASSWORD`
+- `JWT_SECRET`
+- `ADMIN_EMAIL`
+- `ADMIN_PASSWORD`
+- `RABBITMQ_USERNAME`
+- `RABBITMQ_PASSWORD`
+- `TERM_ID`
 
-  # 2. Spring Boot
-  app:
-    image: eclipse-temurin:21-jre-jammy
-    restart: always
-    environment:
-      - SPRING_PROFILES_ACTIVE=prod
-      - JWT_SECRET=${JWT_SECRET}
-      - DB_USERNAME=root
-      - DB_PASSWORD=${DB_PASSWORD}
-      - MAIL_ADDRESS=${MAIL_ADDRESS}
-      - MAIL_AUTH_CODE=${MAIL_AUTH_CODE}
-      - ADMIN_EMAIL=${ADMIN_EMAIL}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
-      - RABBITMQ_HOST=${RABBITMQ_HOST}
-      - RABBITMQ_PORT=${RABBITMQ_PORT}
-      - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
-      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-    volumes:
-      - ./app.jar:/app.jar
-    command: ["java", "-Xmx512m", "-jar", "/app.jar"]
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
+If needed, also adjust:
+- `RABBITMQ_HOST`
+- `RABBITMQ_PORT`
+- `REDIS_HOST`
+- `REDIS_PORT`
 
-  # 3. Caddy
-  caddy:
-    image: caddy:2
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
+### 2. Check the domain
 
-  # 4. RabbitMQ
-  rabbitmq:
-    image: rabbitmq:3.13-management
-    restart: always
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    ports:
-      - "5672:5672"
-      - "15672:15672"
+Edit `Caddyfile` and replace the domain if needed:
 
-volumes:
-  caddy_data:
-  caddy_config:
+```caddy
+madenroll.duckdns.org {
+    reverse_proxy app:8080
+}
 ```
 
-**3. Start the services:**
+### 3. Build the jar
+
+```bash
+sh mvnw clean package -DskipTests
+cp target/CourseMonitor-0.0.1-SNAPSHOT.jar app.jar
+```
+
+### 4. Start the full stack
+
 ```bash
 docker compose up -d
 ```
 
-### Local Dev
+### 5. Check service status
 
-For local development, the application defaults to using `application-dev.properties`.
+```bash
+docker compose ps
+docker compose logs -f app
+```
 
-Create a `.env` file in your local environment with the identical structure as above (you can hardcode `DB_USERNAME` if preferred).
+### 6. Open the app
 
-Run the Spring Boot Monitor Application.
+After the containers are healthy, open your configured domain in the browser.
 
-Access the local client at `http://localhost:8080`.
+## Notes
 
-## Developers
-Developed by Yinwen Gong.
+- The production stack includes MySQL, RabbitMQ, Redis, the Spring Boot app, and Caddy.
+- The app container runs with the `prod` profile.
+- If `docker compose up -d` fails locally with a Docker daemon error, start Docker Desktop (or your Docker engine) first.
 
 ## Disclaimer
-This project is an independent tool and is not affiliated with University of Wisconsin-Madison.
+
+This project is an independent tool and is not affiliated with the University of Wisconsin-Madison.
