@@ -264,10 +264,22 @@ public class SchedulerService {
     private void dispatchMail(AlertAction action, String recipientEmail, SectionInfo info) {
         if (action == AlertAction.SEND_OPEN_EMAIL) {
             log.info("[Scheduler] ALERT OPEN detected for {}", info.getSectionId());
-            alertPublisherService.publishAlert(AlertType.OPEN, recipientEmail, info.getSectionId(), info.getCourseDisplayName());
+            alertPublisherService.publishAlert(
+                    AlertType.OPEN,
+                    recipientEmail,
+                    info.getSectionId(),
+                    info.getCourseDisplayName(),
+                    info.getTermCode()
+            );
         } else if (action == AlertAction.SEND_WAITLIST_EMAIL) {
             log.info("[Scheduler] ALERT WAITLIST detected for {}", info.getSectionId());
-            alertPublisherService.publishAlert(AlertType.WAITLIST, recipientEmail, info.getSectionId(), info.getCourseDisplayName());
+            alertPublisherService.publishAlert(
+                    AlertType.WAITLIST,
+                    recipientEmail,
+                    info.getSectionId(),
+                    info.getCourseDisplayName(),
+                    info.getTermCode()
+            );
         }
     }
 

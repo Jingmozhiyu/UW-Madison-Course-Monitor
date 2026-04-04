@@ -16,6 +16,7 @@ public class AlertDeadLetterRespDto {
     private String recipientEmail;
     private String sectionId;
     private String courseDisplayName;
+    private String termId;
     private String reason;
     private String sourceQueue;
     private LocalDateTime createdAt;

@@ -42,6 +42,9 @@ public class AlertDeadLetter {
     @Column(name = "course_display_name")
     private String courseDisplayName;
 
+    @Column(name = "term_id")
+    private String termId;
+
     @Column(name = "dead_letter_reason")
     private String reason;
 

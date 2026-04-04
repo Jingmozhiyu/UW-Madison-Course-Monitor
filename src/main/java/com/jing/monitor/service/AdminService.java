@@ -151,8 +151,16 @@ public class AdminService {
         AlertType alertType = req.getAlertType() == null ? AlertType.OPEN : req.getAlertType();
         String sectionId = firstNonBlank(req.getSectionId(), "99999");
         String courseDisplayName = firstNonBlank(req.getCourseDisplayName(), "TEST COURSE");
+        String termId = requireValidTermId(req.getTermId());
 
-        alertPublisherService.publishAlert(alertType, recipientEmail, sectionId, courseDisplayName, true);
+        alertPublisherService.publishAlert(
+                alertType,
+                recipientEmail,
+                sectionId,
+                courseDisplayName,
+                termId,
+                true
+        );
     }
 
     /**
@@ -214,6 +222,7 @@ public class AdminService {
         dto.setRecipientEmail(deadLetter.getRecipientEmail());
         dto.setSectionId(deadLetter.getSectionId());
         dto.setCourseDisplayName(deadLetter.getCourseDisplayName());
+        dto.setTermId(deadLetter.getTermId());
         dto.setReason(deadLetter.getReason());
         dto.setSourceQueue(deadLetter.getSourceQueue());
         dto.setCreatedAt(deadLetter.getCreatedAt());
@@ -229,6 +238,7 @@ public class AdminService {
         dto.setRecipientEmail(deliveryLog.getRecipientEmail());
         dto.setSectionId(deliveryLog.getSectionId());
         dto.setCourseDisplayName(deliveryLog.getCourseDisplayName());
+        dto.setTermId(deliveryLog.getTermId());
         dto.setSourceQueue(deliveryLog.getSourceQueue());
         dto.setManualTest(deliveryLog.isManualTest());
         dto.setSentAt(deliveryLog.getSentAt());
@@ -240,6 +250,13 @@ public class AdminService {
             return preferred.trim();
         }
         return fallback;
+    }
+
+    private String requireValidTermId(String termId) {
+        if (termId == null || !termId.matches("\\d{4}")) {
+            throw new RuntimeException("termId must be a 4-digit number.");
+        }
+        return termId;
     }
 
     private void armCourseForImmediatePolling(Course course) {

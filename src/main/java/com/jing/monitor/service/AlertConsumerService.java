@@ -43,9 +43,19 @@ public class AlertConsumerService {
     public void consumeAlert(AlertEvent event) {
         try {
             if (event.getAlertType() == AlertType.OPEN) {
-                mailService.sendCourseOpenAlert(event.getRecipientEmail(), event.getSectionId(), event.getCourseDisplayName());
+                mailService.sendCourseOpenAlert(
+                        event.getRecipientEmail(),
+                        event.getSectionId(),
+                        event.getCourseDisplayName(),
+                        event.getTermId()
+                );
             } else if (event.getAlertType() == AlertType.WAITLIST) {
-                mailService.sendCourseWaitlistedAlert(event.getRecipientEmail(), event.getSectionId(), event.getCourseDisplayName());
+                mailService.sendCourseWaitlistedAlert(
+                        event.getRecipientEmail(),
+                        event.getSectionId(),
+                        event.getCourseDisplayName(),
+                        event.getTermId()
+                );
             } else if (event.getAlertType() == AlertType.WELCOME) {
                 mailService.sendWelcomeEmail(event.getRecipientEmail());
             } else if (event.getAlertType() == AlertType.FEEDBACK) {
@@ -78,6 +88,7 @@ public class AlertConsumerService {
         deadLetter.setRecipientEmail(event == null ? null : event.getRecipientEmail());
         deadLetter.setSectionId(event == null ? null : event.getSectionId());
         deadLetter.setCourseDisplayName(event == null ? null : event.getCourseDisplayName());
+        deadLetter.setTermId(event == null ? null : event.getTermId());
         deadLetter.setReason(extractDeadLetterReason(message));
         deadLetter.setSourceQueue(extractSourceQueue(message));
         deadLetter.setCreatedAt(LocalDateTime.now());
@@ -130,6 +141,7 @@ public class AlertConsumerService {
             deliveryLog.setRecipientEmail(event.getRecipientEmail());
             deliveryLog.setSectionId(event.getSectionId());
             deliveryLog.setCourseDisplayName(event.getCourseDisplayName());
+            deliveryLog.setTermId(event.getTermId());
             deliveryLog.setSourceQueue(alertQueueName);
             deliveryLog.setManualTest(event.isManualTest());
             deliveryLog.setSentAt(LocalDateTime.now());

@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -37,14 +38,13 @@ public class MailService {
      * @param recipientEmail recipient mailbox
      * @param section section id
      * @param courseInfo course display text
+     * @param termId UW term id used to build the enroll search URL
      */
-    public void sendCourseOpenAlert(String recipientEmail, String section, String courseInfo) {
+    public void sendCourseOpenAlert(String recipientEmail, String section, String courseInfo, String termId) {
         log.info("[Mail] Preparing to send OPEN alert for section {} to {}", section, recipientEmail);
 
         try {
-            // Encode the courseInfo (e.g. "comp sci 577" -> "comp+sci+577") to build a valid URL
-            String encodedCourse = URLEncoder.encode(courseInfo, StandardCharsets.UTF_8);
-            String enrollLink = "https://enroll.wisc.edu/search?keywords=" + encodedCourse;
+            String enrollLink = buildEnrollLink(termId, courseInfo);
 
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);
@@ -81,14 +81,13 @@ public class MailService {
      * @param recipientEmail recipient mailbox
      * @param section section id
      * @param courseInfo course display text
+     * @param termId UW term id used to build the enroll search URL
      */
-    public void sendCourseWaitlistedAlert(String recipientEmail, String section, String courseInfo) {
+    public void sendCourseWaitlistedAlert(String recipientEmail, String section, String courseInfo, String termId) {
         log.info("[Mail] Preparing to send WAITLIST alert for section {} to {}", section, recipientEmail);
 
         try {
-            // Encode the courseInfo (e.g. "comp sci 577" -> "comp+sci+577") to build a valid URL
-            String encodedCourse = URLEncoder.encode(courseInfo, StandardCharsets.UTF_8);
-            String enrollLink = "https://enroll.wisc.edu/search?keywords=" + encodedCourse;
+            String enrollLink = buildEnrollLink(termId, courseInfo);
 
             SimpleMailMessage message = new SimpleMailMessage();
             message.setFrom(fromEmail);
@@ -197,5 +196,27 @@ public class MailService {
             throw new IllegalArgumentException("Feedback text is required.");
         }
         return feedbackText.trim();
+    }
+
+    private String buildEnrollLink(String termId, String courseInfo) {
+        String normalizedCourseInfo = requireCourseInfo(courseInfo)
+                .toLowerCase(Locale.ROOT);
+        String encodedCourse = URLEncoder.encode(normalizedCourseInfo, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+
+        StringBuilder link = new StringBuilder("https://enroll.wisc.edu/search?keywords=")
+                .append(encodedCourse)
+                .append("&closed=true");
+        if (termId != null && !termId.isBlank()) {
+            link.insert("https://enroll.wisc.edu/search?".length(), "term=" + termId.trim() + "&");
+        }
+        return link.toString();
+    }
+
+    private String requireCourseInfo(String courseInfo) {
+        if (courseInfo == null || courseInfo.isBlank()) {
+            throw new IllegalArgumentException("Course display name is required.");
+        }
+        return courseInfo.trim();
     }
 }

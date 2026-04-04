@@ -35,8 +35,14 @@ public class AlertPublisherService {
      * @param sectionId section identifier
      * @param courseDisplayName display name rendered in the email
      */
-    public void publishAlert(AlertType alertType, String recipientEmail, String sectionId, String courseDisplayName) {
-        publishAlert(alertType, recipientEmail, sectionId, courseDisplayName, false);
+    public void publishAlert(
+            AlertType alertType,
+            String recipientEmail,
+            String sectionId,
+            String courseDisplayName,
+            String termId
+    ) {
+        publishAlert(alertType, recipientEmail, sectionId, courseDisplayName, termId, false);
     }
 
     /**
@@ -46,6 +52,7 @@ public class AlertPublisherService {
      * @param recipientEmail email recipient
      * @param sectionId section identifier
      * @param courseDisplayName display name rendered in the email
+     * @param termId UW term id used to build the enroll search URL inside the email
      * @param manualTest whether this event comes from the admin test endpoint
      */
     public void publishAlert(
@@ -53,6 +60,7 @@ public class AlertPublisherService {
             String recipientEmail,
             String sectionId,
             String courseDisplayName,
+            String termId,
             boolean manualTest
     ) {
         AlertEvent event = new AlertEvent();
@@ -61,6 +69,7 @@ public class AlertPublisherService {
         event.setRecipientEmail(recipientEmail);
         event.setSectionId(sectionId);
         event.setCourseDisplayName(courseDisplayName);
+        event.setTermId(termId);
         event.setMessageBody(null);
         event.setManualTest(manualTest);
         event.setCreatedAt(LocalDateTime.now());
@@ -75,7 +84,7 @@ public class AlertPublisherService {
      * @param recipientEmail email recipient
      */
     public void publishWelcomeEmail(String recipientEmail) {
-        publishAlert(AlertType.WELCOME, recipientEmail, "WELCOME", "Welcome to MadEnroll", false);
+        publishAlert(AlertType.WELCOME, recipientEmail, "WELCOME", "Welcome to MadEnroll", null, false);
     }
 
     /**
@@ -92,6 +101,7 @@ public class AlertPublisherService {
         event.setSenderEmail(senderEmail);
         event.setSectionId("FEEDBACK");
         event.setCourseDisplayName("User Feedback");
+        event.setTermId(null);
         event.setMessageBody(feedbackText);
         event.setManualTest(false);
         event.setCreatedAt(LocalDateTime.now());

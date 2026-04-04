@@ -41,6 +41,9 @@ public class AlertDeliveryLog {
     @Column(name = "course_display_name", nullable = false)
     private String courseDisplayName;
 
+    @Column(name = "term_id")
+    private String termId;
+
     @Column(name = "source_queue", nullable = false)
     private String sourceQueue;
 
