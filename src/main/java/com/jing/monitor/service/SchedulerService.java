@@ -68,6 +68,9 @@ public class SchedulerService {
     @Value("${monitor.scheduler-fetch-interval-ms:3000}")
     private long fetchIntervalMs;
 
+    @Value("${monitor.scheduler-slow-task-warn-ms:20000}")
+    private long slowTaskWarnMs;
+
     enum AlertAction { NONE, SEND_OPEN_EMAIL, SEND_WAITLIST_EMAIL }
 
     /**
@@ -78,23 +81,30 @@ public class SchedulerService {
     public synchronized void monitorTask() {
         LocalDateTime now = LocalDateTime.now();
         lastHeartbeatAt = now;
-        List<Course> dueCourses = courseRepository.findAllDueForPolling(now);
-        if (dueCourses.isEmpty()) {
-            return;
-        }
-
-        int enqueuedCount = 0;
-        for (Course course : dueCourses) {
-            if (!subscriptionRepository.existsByEnabledTrueAndSection_Course_Id(course.getId())) {
-                continue;
+        long startedAtMillis = System.currentTimeMillis();
+        try {
+            List<Course> dueCourses = courseRepository.findAllDueForPolling(now);
+            if (dueCourses.isEmpty()) {
+                return;
             }
-            if (enqueueCourseIfAbsent(course.getId(), course.getCourseId(), course.getTermCode(), course.getSubjectCode())) {
-                enqueuedCount++;
-            }
-        }
 
-        if (enqueuedCount > 0) {
-            log.info("[Scheduler] Heartbeat enqueued {} due courses (queueSize={}).", enqueuedCount, dueCourseQueue.size());
+            int enqueuedCount = 0;
+            for (Course course : dueCourses) {
+                if (!subscriptionRepository.existsByEnabledTrueAndSection_Course_Id(course.getId())) {
+                    continue;
+                }
+                if (enqueueCourseIfAbsent(course.getId(), course.getCourseId(), course.getTermCode(), course.getSubjectCode())) {
+                    enqueuedCount++;
+                }
+            }
+
+            if (enqueuedCount > 0) {
+                log.info("[Scheduler] Heartbeat enqueued {} due courses (queueSize={}).", enqueuedCount, dueCourseQueue.size());
+            }
+        } catch (Exception e) {
+            log.error("[Scheduler] Heartbeat failed while discovering due courses.", e);
+        } finally {
+            logSlowTask("heartbeat", startedAtMillis, null);
         }
     }
 
@@ -111,18 +121,26 @@ public class SchedulerService {
         String courseId = q.courseId();
         String subjectCode = q.subjectCode();
         String termCode = q.termCode();
-        lastFetchStartedAt = LocalDateTime.now();
+        LocalDateTime startedAt = LocalDateTime.now();
+        lastFetchStartedAt = startedAt;
         lastFetchedCourseId = termCode + ":" + courseId;
+        long startedAtMillis = System.currentTimeMillis();
 
-        List<UserSectionSubscription> subs = subscriptionRepository.findAllByEnabledTrueAndSection_Course_Id(q.courseUuid());
-        if (subs.isEmpty()) {
-            log.info("[Scheduler] Dropping queued course {}:{} because it no longer has enabled subscriptions.", termCode, courseId);
+        try {
+            List<UserSectionSubscription> subs = subscriptionRepository.findAllByEnabledTrueAndSection_Course_Id(q.courseUuid());
+            if (subs.isEmpty()) {
+                log.info("[Scheduler] Dropping queued course {}:{} because it no longer has enabled subscriptions.", termCode, courseId);
+                return;
+            }
+
+            processSingleCourse(termCode, subjectCode, courseId, subs, startedAt);
+        } catch (Exception e) {
+            scheduleAfterFailureSafely(resolveCourseById(q.courseUuid()), startedAt, termCode + ":" + courseId);
+            log.error("[Scheduler] Unhandled error while consuming queued course {}:{}", termCode, courseId, e);
+        } finally {
             lastFetchFinishedAt = LocalDateTime.now();
-            return;
+            logSlowTask("fetch", startedAtMillis, termCode + ":" + courseId);
         }
-
-        processSingleCourse(termCode, subjectCode, courseId, subs, LocalDateTime.now());
-        lastFetchFinishedAt = LocalDateTime.now();
     }
 
     /**
@@ -411,6 +429,39 @@ public class SchedulerService {
         course.setLastPolledAt(polledAt);
         course.setNextPollAt(polledAt.plusSeconds(FETCH_FAILURE_RETRY_SECONDS));
         courseRepository.save(course);
+    }
+
+    private void scheduleAfterFailureSafely(Course course, LocalDateTime polledAt, String courseKey) {
+        if (course == null) {
+            log.warn("[Scheduler] Could not schedule retry for {} because the canonical course row was missing.", courseKey);
+            return;
+        }
+        try {
+            scheduleAfterFailure(course, polledAt);
+        } catch (Exception e) {
+            log.error("[Scheduler] Failed to schedule retry for {}", courseKey, e);
+        }
+    }
+
+    private Course resolveCourseById(UUID courseUuid) {
+        if (courseUuid == null) {
+            return null;
+        }
+        return courseRepository.findById(courseUuid).orElse(null);
+    }
+
+    private void logSlowTask(String taskName, long startedAtMillis, String courseKey) {
+        long durationMs = System.currentTimeMillis() - startedAtMillis;
+        if (durationMs < slowTaskWarnMs) {
+            return;
+        }
+        if (courseKey == null || courseKey.isBlank()) {
+            log.warn("[Scheduler] {} task took {} ms, which exceeds the warn threshold {} ms.",
+                    taskName, durationMs, slowTaskWarnMs);
+            return;
+        }
+        log.warn("[Scheduler] {} task for {} took {} ms, which exceeds the warn threshold {} ms.",
+                taskName, courseKey, durationMs, slowTaskWarnMs);
     }
 
     /**
