@@ -25,11 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service responsible for admin-only subscription views and operations.
@@ -59,25 +56,36 @@ public class AdminService {
     public List<AdminUserSubsRespDto> getAllUserSubscriptions() {
         requireAdmin();
 
-        List<UserSectionSubscription> subs = subscriptionRepository.findAll();
-        Map<UUID, AdminUserSubsRespDto> userMap = new LinkedHashMap<>();
+        List<User> users = userRepository.findAll();
+        Map<UUID,List<UserSectionSubscription>> subsByUUID = subscriptionRepository.findAll()
+                .stream().collect(Collectors.groupingBy(
+                        sub -> sub.getUser().getId(), HashMap::new,Collectors.toList()));
 
-        for (UserSectionSubscription sub : subs) {
-            User user = sub.getUser();
-            AdminUserSubsRespDto userResp = userMap.computeIfAbsent(user.getId(), ignored -> {
+
+        List<AdminUserSubsRespDto> userResp = new ArrayList<>();
+
+        for(User user: users){
+            if(!subsByUUID.containsKey(user.getId())){
                 AdminUserSubsRespDto dto = new AdminUserSubsRespDto();
                 dto.setUserId(user.getId());
                 dto.setEmail(user.getEmail());
                 dto.setRole(user.getRole());
-                return dto;
-            });
-            userResp.getSubscriptions().add(toAdminSubResp(sub));
+                dto.setSubscriptions(new ArrayList<>());
+                userResp.add(dto);
+
+            }
+            else{
+                AdminUserSubsRespDto dto = new AdminUserSubsRespDto();
+                dto.setUserId(user.getId());
+                dto.setEmail(user.getEmail());
+                dto.setRole(user.getRole());
+                dto.setSubscriptions(subsByUUID.get(user.getId()).stream().map(this::toAdminSubResp).collect(Collectors.toList()));
+                userResp.add(dto);
+            }
         }
 
-        return userMap.values().stream()
-                .peek(dto -> dto.getSubscriptions().sort(Comparator.comparing(AdminSectionSubRespDto::getSectionId)))
-                .sorted(Comparator.comparing(AdminUserSubsRespDto::getEmail))
-                .toList();
+
+        return userResp;
     }
 
     /**

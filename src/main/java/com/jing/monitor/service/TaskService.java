@@ -15,6 +15,8 @@ import com.jing.monitor.repository.UserRepository;
 import com.jing.monitor.repository.UserSectionSubscriptionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.aop.framework.AopContext;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +38,7 @@ import java.util.Locale;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@EnableAspectJAutoProxy(exposeProxy = true)
 public class TaskService {
 
     private static final long MAX_ENABLED_SECTION_SUBSCRIPTIONS = 15;
@@ -71,7 +74,6 @@ public class TaskService {
      * @param page requested result page, 1-based
      * @return matching course search hits for the frontend
      */
-    @Transactional
     public List<SearchCourseRespDto> searchCourse(String courseName, String termId, int page) {
         requireValidTermId(termId);
         requireValidSearchPage(page);
@@ -123,7 +125,7 @@ public class TaskService {
             throw new RuntimeException("Course details unavailable: " + courseId);
         }
 
-        Map<String, CourseSection> sectionsByDocId = syncSections(infos);
+        Map<String, CourseSection> sectionsByDocId = ((TaskService) AopContext.currentProxy()).syncSections(infos);
         UUID userId = authContextService.currentUserId();
         Map<String, UserSectionSubscription> subsByDocId =
                 subscriptionRepository.findAllBySection_DocIdInAndUser_Id(sectionsByDocId.keySet(), userId).stream()
@@ -189,7 +191,8 @@ public class TaskService {
      * @param infos fresh section snapshots returned by the crawler
      * @return map of persisted sections keyed by unique doc id
      */
-    private Map<String, CourseSection> syncSections(List<SectionInfo> infos) {
+    @Transactional
+    protected Map<String, CourseSection> syncSections(List<SectionInfo> infos) {
         if (infos == null || infos.isEmpty()) {
             return Map.of();
         }

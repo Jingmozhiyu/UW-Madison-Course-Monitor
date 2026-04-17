@@ -15,5 +15,5 @@ public class AdminUserSubsRespDto {
     private UUID userId;
     private String email;
     private UserRole role;
-    private List<AdminSectionSubRespDto> subscriptions = new ArrayList<>();
+    private List<AdminSectionSubRespDto> subscriptions;
 }
